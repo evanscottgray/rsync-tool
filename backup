@@ -2,79 +2,25 @@
 import gtk, pygtk, sys, argparse, time, pynotify, os, signal
 from subprocess import call
 
-def hourly():
+heirarchy = ['hourly','daily','weekly','monthly']
+retention = [24,7,4,12]
+
+def cycle(loc):
 	last = 0
-
 	try:
 		f = open('/media/WD/Backups/kevin/.hist','r+')
-		last = int(f.readlines()[0].strip())
+		last = int(f.readlines()[loc].strip())
 	except IOError as e:
 		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
 	except ValueError:
 		print 'Incorrect input for integer.'
 
 	else:
-		if last == 23:
-			daily()
-		else:
-			call(['rsnapshot','hourly'])
-			f.write('0')
-		f.close()
-	return
-
-def daily():
-	try:
-		f = open('/media/WD/Backups/kevin/.hist','r+')
-		last = int(f.readlines()[1].strip())
-	except IOError as e:
-		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
-	except ValueError:
-		print 'Incorrect input for integer.'
-
-	else:
-		if last == 6:
-			weekly()
+		if last == retention[loc]-1:
+			cycle(loc+1)
 			f.write('0')
 		else:
-			call(['rsnapshot','daily'])
-			f.write(str(last+1))
-		f.close()
-	return
-
-def weekly():
-	try:
-		f = open('/media/WD/Backups/kevin/.hist','r+')
-		last = int(f.readlines()[2].strip())
-	except IOError as e:
-		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
-	except ValueError:
-		print 'Incorrect input for integer.'
-
-	else:
-		if last == 3:
-			monthly()
-			f.write('0')
-		else:
-			call(['rsnapshot','weekly'])
-			f.write(str(last+1))
-		f.close()
-	return
-
-def monthly():
-	try:
-		f = open('/media/WD/Backups/kevin/.hist','r+')
-		last = int(f.readlines()[3].strip())
-	except IOError as e:
-		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
-	except ValueError:
-		print 'Incorrect input for integer.'
-
-	else:
-		if last == 11:
-			call(['rsnapshot','yearly'])
-			f.write('0')
-		else:
-			call(['rsnapshot','monthly'])
+			call(['rsnapshot',heirarchy[loc]])
 			f.write(str(last+1))
 		f.close()
 	return
@@ -86,7 +32,6 @@ def notification(string,icon):
 	return
 
 def confirm():
-
 	notification(action.title() + ' backup is scheduleded to run in two minutes. Please connect backup medium.','dialog-warning')
 
 	f = open('/tmp/backup.pid','w')
@@ -101,7 +46,7 @@ def confirm():
 		os.remove('/tmp/backup.pid')
 		return
 
-	dialog_response = 'whoop'
+	dialog_response = 0
 	dialog = gtk.MessageDialog(None, gtk.DIALOG_MODAL,\
 		gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO,\
 		action.title() + ' backup is scheduleded to run.' +\
@@ -134,21 +79,14 @@ parser.add_argument('action',action='store')
 
 action = parser.parse_args(sys.argv[1:]).__dict__['action']
 
-if action == 'hourly':
+if action in heirarchy:
 	confirm()
-	hourly()
-if action == 'daily':
-	confirm()
-	daily()
-elif action == 'weekly':
-	confirm()
-	weekly()
-elif action == 'monthly':
-	confirm()
-	monthly()
+	cycle(heirarchy.find(action))
+
 elif action == 'test':
 	print 'testing...'
 	confirm()
+
 elif action == 'kill':
 	print 'killing...'
 	if os.path.exists('/tmp/backup.pid'):
@@ -158,6 +96,7 @@ elif action == 'kill':
 	else:
 		print 'Process not found.'
 		exit()
+
 else:
 	print 'Invalid option.'
 	exit()
