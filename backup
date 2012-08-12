@@ -12,6 +12,9 @@ def notification(string,icon):
 	return
 
 def cycle(loc):
+	if loc > 3 or loc < 0:
+		return
+
 	last = 0
 	try:
 		f = open('/media/WD/Backups/kevin/.hist','r+')
