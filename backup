@@ -5,15 +5,21 @@ from subprocess import call
 heirarchy = ['hourly','daily','weekly','monthly']
 retention = [24,7,4,12]
 
+def notification(string,icon):
+	n = pynotify.Notification("Backup",string,icon)
+	n.set_urgency(pynotify.URGENCY_CRITICAL)
+	n.show()
+	return
+
 def cycle(loc):
 	last = 0
 	try:
 		f = open('/media/WD/Backups/kevin/.hist','r+')
 		last = int(f.readlines()[loc].strip())
 	except IOError as e:
-		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
+		notification('Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror),'dialog-error')
 	except ValueError:
-		print 'Incorrect input for integer.'
+		notification('Error reading history file: incorrect input for integer.','dialog-error')
 
 	else:
 		if last == retention[loc]-1:
@@ -25,14 +31,8 @@ def cycle(loc):
 		f.close()
 	return
 
-def notification(string,icon):
-	n = pynotify.Notification("Backup",string,icon)
-	n.set_urgency(pynotify.URGENCY_CRITICAL)
-	n.show()
-	return
-
 def confirm():
-	notification(action.title() + ' backup is scheduleded to run in two minutes. Please connect backup medium.','dialog-warning')
+	notification(action.title() + ' backup is scheduleded to run in two minutes. Please ensure that the backup device is connected.','dialog-warning')
 
 	f = open('/tmp/backup.pid','w')
 	f.write(str(os.getpid()))
@@ -42,35 +42,35 @@ def confirm():
 
 
 	if (os.path.exists('/media/WD/Backups/kevin')):
-		notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
-		os.remove('/tmp/backup.pid')
+		notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
+		os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
 		return
 
 	dialog_response = 0
 	dialog = gtk.MessageDialog(None, gtk.DIALOG_MODAL,\
 		gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO,\
 		action.title() + ' backup is scheduleded to run.' +\
-		' Is the backup medium mounted at /media/WD?')
+		' Is the backup device mounted at /media/WD?')
 
 	dialog_response = dialog.run()
 	dialog.destroy()
 
-	if dialog_response == -8:
-		notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
-		os.remove('/tmp/backup.pid')
+	if dialog_response == -8 and os.path.exists('/media/WD/Backups/kevin'):
+		notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
+		os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
 		return
 	else:
 		time.sleep(2)
-		dialog = gtk.MessageDialog(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please insert the medium now.')
+		dialog = gtk.MessageDialog(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please mount the device now.')
 		dialog_response = dialog.run()
 		dialog.destroy()
 		print dialog_response
-		if dialog_response == -5:
-			notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
-			os.remove('/tmp/backup.pid')
+		if dialog_response == -5 and os.path.exists('/media/WD/Backups/kevin'):
+			notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
+			os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
 			return
 		else:
-			print 'error code'
+			notification(action.title() + ' backup failed: unable to locate backup device. Please try again later.','dialog-warning')
 			exit()
 
 pynotify.init('Backup')
@@ -93,6 +93,9 @@ elif action == 'kill':
 		os.kill(int(open('/tmp/backup.pid').read().strip()),signal.SIGHUP)
 		notification('The pending backup has been cancelled.','dialog-info')
 		exit()
+	elif os.path.exists('/tmp/backup_lock.pid'):
+		notification('Backup is already in progress. Please do not interrupt the process.','dialog-warning')
+		exit()
 	else:
 		print 'Process not found.'
 		exit()
@@ -101,4 +104,5 @@ else:
 	print 'Invalid option.'
 	exit()
 
-notification(action.title() + " backup has completed now.",'dialog-info')
+notification(action.title() + " backup is complete.",'dialog-info')
+os.remove('/tmp/backup.pid')
