@@ -1,0 +1,145 @@
+#! /usr/bin/env python
+import gtk, pygtk, sys, argparse, time, pynotify, os
+from subprocess import call
+
+def hourly():
+	last = 0
+
+	try:
+		f = open('/media/WD/Backups/kevin/.hist','r+')
+		last = int(f.readlines()[0].strip())
+	except IOError as e:
+		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
+	except ValueError:
+		print 'Incorrect input for integer.'
+
+	else:
+		if last == 23:
+			daily()
+		else:
+			call(['rsnapshot','hourly'])
+			f.write('0')
+		f.close()
+	return
+
+def daily():
+	try:
+		f = open('/media/WD/Backups/kevin/.hist','r+')
+		last = int(f.readlines()[1].strip())
+	except IOError as e:
+		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
+	except ValueError:
+		print 'Incorrect input for integer.'
+
+	else:
+		if last == 6:
+			weekly()
+			f.write('0')
+		else:
+			call(['rsnapshot','daily'])
+			f.write(str(last+1))
+		f.close()
+	return
+
+def weekly():
+	try:
+		f = open('/media/WD/Backups/kevin/.hist','r+')
+		last = int(f.readlines()[2].strip())
+	except IOError as e:
+		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
+	except ValueError:
+		print 'Incorrect input for integer.'
+
+	else:
+		if last == 3:
+			monthly()
+			f.write('0')
+		else:
+			call(['rsnapshot','weekly'])
+			f.write(str(last+1))
+		f.close()
+	return
+
+def monthly():
+	try:
+		f = open('/media/WD/Backups/kevin/.hist','r+')
+		last = int(f.readlines()[3].strip())
+	except IOError as e:
+		print 'Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror)
+	except ValueError:
+		print 'Incorrect input for integer.'
+
+	else:
+		if last == 11:
+			call(['rsnapshot','yearly'])
+			f.write('0')
+		else:
+			call(['rsnapshot','monthly'])
+			f.write(str(last+1))
+		f.close()
+	return
+
+def notification(string,icon):
+	n = pynotify.Notification("Backup",string,icon)
+	n.set_urgency(pynotify.URGENCY_CRITICAL)
+	n.show()
+	return
+
+def confirm():
+
+	if (os.path.exists('/media/WD/Backups/kevin')):
+		notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
+		return
+
+	notification(action.title() + ' backup is scheduleded to run in two minutes. Please connect backup medium.','dialog-warning')
+
+	time.sleep(120)
+	dialog_response = 'whoop'
+	dialog = gtk.MessageDialog(None, gtk.DIALOG_MODAL,\
+		gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO,\
+		action.title() + ' backup is scheduleded to run.' +\
+		' Is the backup medium mounted at /media/WD?')
+
+	dialog_response = dialog.run()
+	dialog.destroy()
+
+	if dialog_response == -8:
+		return
+	else:
+		time.sleep(2)
+		dialog = gtk.MessageDialog(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please insert the medium now.')
+		dialog_response = dialog.run()
+		dialog.destroy()
+		print dialog_response
+		if dialog_response == -5:
+			return
+		else:
+			print 'error code'
+			exit()
+
+pynotify.init('Backup')
+parser = argparse.ArgumentParser()
+parser.add_argument('action',action='store')
+
+action = parser.parse_args(sys.argv[1:]).__dict__['action']
+
+if action == 'hourly':
+	confirm()
+	hourly()
+if action == 'daily':
+	confirm()
+	daily()
+elif action == 'weekly':
+	confirm()
+	weekly()
+elif action == 'monthly':
+	confirm()
+	monthly()
+elif action == 'test':
+	print 'testing...'
+	confirm()
+else:
+	print 'Invalid option.'
+	exit()
+
+notification(action.title() + " backup has completed now.",'dialog-info')
