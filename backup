@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-import gtk, pygtk, sys, argparse, time, pynotify, os
+import gtk, pygtk, sys, argparse, time, pynotify, os, signal
 from subprocess import call
 
 def hourly():
@@ -87,13 +87,20 @@ def notification(string,icon):
 
 def confirm():
 
-	if (os.path.exists('/media/WD/Backups/kevin')):
-		notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
-		return
-
 	notification(action.title() + ' backup is scheduleded to run in two minutes. Please connect backup medium.','dialog-warning')
 
+	f = open('/tmp/backup.pid','w')
+	f.write(str(os.getpid()))
+	f.close()
+
 	time.sleep(120)
+
+
+	if (os.path.exists('/media/WD/Backups/kevin')):
+		notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
+		os.remove('/tmp/backup.pid')
+		return
+
 	dialog_response = 'whoop'
 	dialog = gtk.MessageDialog(None, gtk.DIALOG_MODAL,\
 		gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO,\
@@ -104,6 +111,8 @@ def confirm():
 	dialog.destroy()
 
 	if dialog_response == -8:
+		notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
+		os.remove('/tmp/backup.pid')
 		return
 	else:
 		time.sleep(2)
@@ -112,6 +121,8 @@ def confirm():
 		dialog.destroy()
 		print dialog_response
 		if dialog_response == -5:
+			notification(action.title() + ' backup is now running. Please do not remove backup medium.','dialog-warning')
+			os.remove('/tmp/backup.pid')
 			return
 		else:
 			print 'error code'
@@ -138,6 +149,15 @@ elif action == 'monthly':
 elif action == 'test':
 	print 'testing...'
 	confirm()
+elif action == 'kill':
+	print 'killing...'
+	if os.path.exists('/tmp/backup.pid'):
+		os.kill(int(open('/tmp/backup.pid').read().strip()),signal.SIGHUP)
+		notification('The pending backup has been cancelled.','dialog-info')
+		exit()
+	else:
+		print 'Process not found.'
+		exit()
 else:
 	print 'Invalid option.'
 	exit()
