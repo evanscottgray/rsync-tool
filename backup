@@ -1,9 +1,20 @@
 #! /usr/bin/env python
-import gtk, pygtk, sys, argparse, time, pynotify, os, signal
-from subprocess import call
+import gtk, pygtk, sys, argparse, time
+import pynotify, os, signal, shutil, subprocess
+from subprocess import check_output
 
 heirarchy = ['hourly','daily','weekly','monthly']
 retention = [24,7,4,12]
+back_dir = '/media/WD/Backups/kevin/'
+
+class logger(object):
+	def write(self,data):
+		f = open(back_dir+'.log','a')
+		f.write(data)
+		f.close()
+
+sys.stdout = logger()
+sys.stderr = logger()
 
 def notification(string,icon):
 	n = pynotify.Notification("Backup",string,icon)
@@ -11,25 +22,99 @@ def notification(string,icon):
 	n.show()
 	return
 
+def onexit():
+	notification('The backup has encountered a fatal encounter and has been forced to exit. Check the logfile for further details.','dialog-error')
+	exit()
+
+def rsync(source,excludes=None):
+	params = ['/usr/bin/rsync',\
+		'-a',\
+		'--numeric-ids',\
+		'--relative',\
+		'--delete-excluded']
+	if excludes:
+		for exclude in excludes:
+			params.append('--exclude='+exclude)
+	params.append(source)
+	params.append(back_dir+'hourly.0/')
+
+	try: print check_output(params)
+	except subprocess.CalledProcessError as e:
+		print 'ERROR: could not execute {0}: exited with return code {1}.\n\t{2}'.format(e.cmd,e.returncode,e.output)
+	return
+
+def name_strip(name,loc):
+	try: names = os.listdir(loc)
+	except OSError as e:
+		print 'ERROR: Could not list files in {0}. Error number {1}.\n\t{2}'.format(e.filename,e.errno,e.strerror)
+		onexit()
+	else:
+		cyc = []
+		for n in names:
+			if name in n:
+				time = n[len(name)+1:]
+				try: time = int(time)
+				except ValueError: print 'Could not convert ' + name + ' to integer; skipped.'
+				else: cyc.append(time)
+		return sorted(cyc,reverse=True)
+
 def cycle(loc):
 	if loc > 3 or loc < 0:
 		return
 
 	last = 0
 	try:
-		f = open('/media/WD/Backups/kevin/.hist','r+')
+		f = open(back_dir+'.hist','r+')
 		last = int(f.readlines()[loc].strip())
 	except IOError as e:
-		notification('Could not read file: I/O error ({0}): {1}'.format(e.errno, e.strerror),'dialog-error')
+		print 'ERROR: Could not read history file ({0}).\n\t{1}'.format(e.errno, e.strerror)
+		f.close()
+		onexit()
 	except ValueError:
-		notification('Error reading history file: incorrect input for integer.','dialog-error')
+		print 'Error reading history file: incorrect input for integer.'
+		f.close()
+		onexit()
 
 	else:
 		if last == retention[loc]-1:
 			cycle(loc+1)
 			f.write('0')
 		else:
-			call(['rsnapshot',heirarchy[loc]])
+			names = name_strip(heirarchy[loc],back_dir)
+			for name in names:
+				os.rename(heirarchy[loc]+'.'+str(name),heirarchy[loc]+'.'+str(name+1))
+
+			if hierarchy[loc] == 'hourly':
+				try:
+					print check_output(['/bin/cp','-al',back_dir+'hourly.0',back_dir+'hourly.1'])
+				except subprocess.CalledProcessError as e:
+					print 'ERROR: Executing rsync failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output)
+				rsync('/home/kevin/',['/home/kevin/.local/share/Trash/','/home/kevin/.cache/'])
+				rsync('/usr/local/')
+				rsync('/usr/share/')
+				rsync('/etc/')
+				rsync('/opt/')
+				if os.path.exists(back_dir+'hourly.0'):
+					print 'rsync executed successfully.'
+				else:
+					print 'ERROR: rsync was not successful.'
+					try: os.mkdir(back_dir+'hourly.0')
+					except OSError: print 'ERROR: could not create empty dir; next backup will fail.'
+					notification('rsync failed; please correct any errors manually.','dialog-error')
+			else:
+				if os.path.exists(back_dir+heirarchy[loc-1]+'.'+str(retention[loc]-1)):
+					try: os.rename(back_dir+heirarchy[loc-1]+'.'+str(retention[loc]-1),back_dir+heirarchy[loc]+'.0')
+					except OSError as e:
+						print 'ERROR: could not cycle new ' + heirarchy[loc] +\
+						' backup at/from {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
+						notification('Unable to cycle backups; please correct any errors manually.','dialog-error')
+
+			if cyc[len(cyc)-1] == retention[loc]-1:
+				try: shutil.rmtree(back_dir+heirarchy[loc]+'.'+retention[loc])
+				except OSError as e:
+					print 'ERROR: Could not remove {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
+					notification('Unable to remove old backup; please delete manually.','dialog-error')
+
 			f.write(str(last+1))
 		f.close()
 	return
@@ -44,9 +129,10 @@ def confirm():
 	time.sleep(120)
 
 
-	if (os.path.exists('/media/WD/Backups/kevin')):
+	if (os.path.exists(back_dir)):
 		notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
-		os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
+		try: os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
+		except OSError as e: print 'ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
 		return
 
 	dialog_response = 0
@@ -58,9 +144,10 @@ def confirm():
 	dialog_response = dialog.run()
 	dialog.destroy()
 
-	if dialog_response == -8 and os.path.exists('/media/WD/Backups/kevin'):
+	if dialog_response == -8 and os.path.exists(back_dir):
 		notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
-		os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
+		try: os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
+		except OSError as e: print 'ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
 		return
 	else:
 		time.sleep(2)
@@ -68,13 +155,15 @@ def confirm():
 		dialog_response = dialog.run()
 		dialog.destroy()
 		print dialog_response
-		if dialog_response == -5 and os.path.exists('/media/WD/Backups/kevin'):
+		if dialog_response == -5 and os.path.exists(back_dir):
 			notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
-			os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
+			try: os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
+			except OSError as e: print 'ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
 			return
 		else:
-			notification(action.title() + ' backup failed: unable to locate backup device. Please try again later.','dialog-warning')
+			notification(action.title() + ' backup failed: unable to locate backup device. Please try again later.','dialog-error')
 			exit()
+	return
 
 pynotify.init('Backup')
 parser = argparse.ArgumentParser()
@@ -93,13 +182,15 @@ elif action == 'test':
 elif action == 'kill':
 	print 'killing...'
 	if os.path.exists('/tmp/backup.pid'):
-		os.kill(int(open('/tmp/backup.pid').read().strip()),signal.SIGHUP)
+		try: os.kill(int(open('/tmp/backup.pid').read().strip()),signal.SIGHUP)
+		except OSError as e: print 'ERROR: could not kill process.'
 		notification('The pending backup has been cancelled.','dialog-info')
 		exit()
 	elif os.path.exists('/tmp/backup_lock.pid'):
 		notification('Backup is already in progress. Please do not interrupt the process.','dialog-warning')
 		exit()
 	else:
+		notification('No backup in progress. Are you sure one is running?','dialog-question')
 		print 'Process not found.'
 		exit()
 
@@ -108,4 +199,5 @@ else:
 	exit()
 
 notification(action.title() + " backup is complete.",'dialog-info')
-os.remove('/tmp/backup.pid')
+try: os.remove('/tmp/backup.pid')
+except OSError as e: print 'ERROR: Could not remove lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
