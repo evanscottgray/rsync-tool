@@ -1,20 +1,19 @@
 #! /usr/bin/env python
 import gtk, pygtk, sys, argparse, time
 import pynotify, os, signal, shutil, subprocess
-from subprocess import check_output
 
 heirarchy = ['hourly','daily','weekly','monthly']
-retention = [24,7,4,12]
+retention = [4,7,4,12]
 back_dir = '/media/WD/Backups/kevin/'
 
 class logger(object):
 	def write(self,data):
-		f = open(back_dir+'.log','a')
+		f = open('/home/kevin/.log','a')
 		f.write(data)
 		f.close()
 
-sys.stdout = logger()
-sys.stderr = logger()
+#sys.stdout = logger()
+#sys.stderr = logger()
 
 def notification(string,icon):
 	n = pynotify.Notification("Backup",string,icon)
@@ -26,7 +25,34 @@ def onexit():
 	notification('The backup has encountered a fatal encounter and has been forced to exit. Check the logfile for further details.','dialog-error')
 	exit()
 
+def ProcessError(Exception):
+	def __init__(self, cmd, returncode, output):
+		self.cmd = cmd
+		self.returncode = returncode
+		self.output = output
+	def __str__(self, cmd, returncode, output):
+		return repr('Process ' + cmd + ' failed with code ' + returncode + '.\n' + output)
+
+def execute(cmd):
+	process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	
+	while True:
+		nextline = process.stdout.readline()
+		if nextline == '' and process.poll() != None:
+				break
+		sys.stdout.write(nextline)
+		sys.stdout.flush()
+
+	output = process.communicate()[0]
+	returncode = process.returncode
+
+	if (returncode == 0):
+		return output
+	else:
+		raise ProcessError(cmd, returncode, output)
+
 def rsync(source,excludes=None):
+	print 'Syncing ' + source
 	params = ['/usr/bin/rsync',\
 		'-a',\
 		'--numeric-ids',\
@@ -36,10 +62,10 @@ def rsync(source,excludes=None):
 		for exclude in excludes:
 			params.append('--exclude='+exclude)
 	params.append(source)
-	params.append(back_dir+'hourly.0/')
+	params.append(back_dir+'hourly.00/')
 
-	try: print check_output(params)
-	except subprocess.CalledProcessError as e:
+	try: print execute(params)
+	except ProcessError as e:
 		print 'ERROR: could not execute {0}: exited with return code {1}.\n\t{2}'.format(e.cmd,e.returncode,e.output)
 	return
 
@@ -54,7 +80,7 @@ def name_strip(name,loc):
 			if name in n:
 				time = n[len(name)+1:]
 				try: time = int(time)
-				except ValueError: print 'Could not convert ' + name + ' to integer; skipped.'
+				except ValueError: print 'Could not convert ' + n + ' to integer; skipped.'
 				else: cyc.append(time)
 		return sorted(cyc,reverse=True)
 
@@ -64,81 +90,117 @@ def cycle(loc):
 
 	last = 0
 	try:
+		print 'Reading history file...'
 		f = open(back_dir+'.hist','r+')
-		last = int(f.readlines()[loc].strip())
+		hist = f.readlines()
+		f.close()
+		last = int(hist[loc].strip())
 	except IOError as e:
 		print 'ERROR: Could not read history file ({0}).\n\t{1}'.format(e.errno, e.strerror)
-		f.close()
 		onexit()
 	except ValueError:
 		print 'Error reading history file: incorrect input for integer.'
-		f.close()
 		onexit()
 
 	else:
-		if last == retention[loc]-1:
+		print last
+		if last == retention[loc]:
+			print 'Retention reached; moving one step up the hierarchy.'
 			cycle(loc+1)
-			f.write('0')
+			hist[loc] = '0'
 		else:
 			names = name_strip(heirarchy[loc],back_dir)
-			for name in names:
-				os.rename(heirarchy[loc]+'.'+str(name),heirarchy[loc]+'.'+str(name+1))
+			if 00 in names:
+				print 'Renaming files...'
+				for name in names:
+					fro = back_dir+heirarchy[loc]+'.'+str(name).zfill(2)+'/'
+					to = back_dir+heirarchy[loc]+'.'+str(name+1).zfill(2)+'/'
+					try: print execute(['/bin/mv', fro, to])
+					except ProcessError as e:
+						print 'ERROR: Could not cycle backups. Command {0} failed with code {1}.\n{2}'.format(e.cmd,e.returncode,e.output)
+						onexit()
 
-			if hierarchy[loc] == 'hourly':
-				try:
-					print check_output(['/bin/cp','-al',back_dir+'hourly.0',back_dir+'hourly.1'])
-				except subprocess.CalledProcessError as e:
-					print 'ERROR: Executing rsync failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output)
+			if heirarchy[loc] == 'hourly':
+				print 'Copying new backup directory...'
+				if os.path.exists(back_dir+'hourly.01'):
+					try:
+						print execute(['/bin/cp','-val',back_dir+'hourly.01',back_dir+'hourly.00'])
+					except ProcessError as e:
+						print 'ERROR: Copying backup failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output)
+						onexit()
 				rsync('/home/kevin/',['/home/kevin/.local/share/Trash/','/home/kevin/.cache/'])
 				rsync('/usr/local/')
 				rsync('/usr/share/')
 				rsync('/etc/')
 				rsync('/opt/')
-				if os.path.exists(back_dir+'hourly.0'):
+				if os.path.exists(back_dir+'hourly.00'):
 					print 'rsync executed successfully.'
 				else:
 					print 'ERROR: rsync was not successful.'
-					try: os.mkdir(back_dir+'hourly.0')
+					try: os.mkdir(back_dir+'hourly.00')
 					except OSError: print 'ERROR: could not create empty dir; next backup will fail.'
 					notification('rsync failed; please correct any errors manually.','dialog-error')
 			else:
-				if os.path.exists(back_dir+heirarchy[loc-1]+'.'+str(retention[loc]-1)):
-					try: os.rename(back_dir+heirarchy[loc-1]+'.'+str(retention[loc]-1),back_dir+heirarchy[loc]+'.0')
-					except OSError as e:
+				print 'Using most recent backup from one step down...'
+				if os.path.exists(back_dir+heirarchy[loc-1]+'.'+str(retention[loc-1]-1).zfill(2)):
+					print 'Renaming backup...'
+					try: execute(['mv',back_dir+heirarchy[loc-1]+'.'+str(retention[loc-1]-1).zfill(2),back_dir+heirarchy[loc]+'.00'])
+					except ProcessError as e:
 						print 'ERROR: could not cycle new ' + heirarchy[loc] +\
-						' backup at/from {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
+						' backup ({0}): {1} failed.\n\t{2}'.format(e.returncode,e.cmd,e.output)
 						notification('Unable to cycle backups; please correct any errors manually.','dialog-error')
 
-			if cyc[len(cyc)-1] == retention[loc]-1:
-				try: shutil.rmtree(back_dir+heirarchy[loc]+'.'+retention[loc])
+			if os.path.exists(back_dir+heirarchy[loc]+'.'+str(retention[loc]).zfill(2)):
+				print 'Removing old backups...'
+				try: shutil.rmtree(back_dir+heirarchy[loc]+'.'+str(retention[loc]).zfill(2))
 				except OSError as e:
 					print 'ERROR: Could not remove {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
 					notification('Unable to remove old backup; please delete manually.','dialog-error')
 
-			f.write(str(last+1))
+			hist[loc] = str(last+1)
+
+		f = open(back_dir+'.hist','w')
+		for l in hist:
+			f.write(l.strip())
+			f.write('\n')
 		f.close()
 	return
 
-def confirm():
-	notification(action.title() + ' backup is scheduleded to run in two minutes. Please ensure that the backup device is connected.','dialog-warning')
+def confirm(t=120):
+	timetill = ''
+	if t//3600 > 0:
+			timetill += str(t//3600) + ' hour'
+			if t//3600 > 1:
+				timetill += 's'
+	if t%3600//60 > 0:
+		timetill += ' ' + str(t%3600//60) + ' minute'
+		if t%3600//60 > 1:
+			timetill += 's'
+	if t%60 != 0:
+		timetill += ' ' + str(t%60) + ' second'
+		if t%60 > 1:
+			timetill += 's'
+
+	if os.path.exists('/tmp/backup.pid'):
+		print 'Backup already in progress. Please try again later.'
+		onexit()
+
+	notification(action.title() + ' backup is scheduled to run in ' + timetill + '. Please ensure that the backup device is connected.','dialog-warning')
 
 	f = open('/tmp/backup.pid','w')
 	f.write(str(os.getpid()))
 	f.close()
-
-	time.sleep(120)
-
+	time.sleep(t)
 
 	if (os.path.exists(back_dir)):
 		notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
 		try: os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
 		except OSError as e: print 'ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
 		return
-
 	dialog_response = 0
 	dialog = gtk.MessageDialog(None, gtk.DIALOG_MODAL,\
 		gtk.MESSAGE_QUESTION, gtk.BUTTONS_YES_NO,\
-		action.title() + ' backup is scheduleded to run.' +\
+		action.title() + ' backup is scheduled to run.' +\
 		' Is the backup device mounted at /media/WD?')
 
 	dialog_response = dialog.run()
@@ -150,7 +212,6 @@ def confirm():
 		except OSError as e: print 'ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
 		return
 	else:
-		time.sleep(2)
 		dialog = gtk.MessageDialog(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please mount the device now.')
 		dialog_response = dialog.run()
 		dialog.destroy()
@@ -168,16 +229,19 @@ def confirm():
 pynotify.init('Backup')
 parser = argparse.ArgumentParser()
 parser.add_argument('action',action='store')
+parser.add_argument('-t',action='store',type=int)
 
-action = parser.parse_args(sys.argv[1:]).__dict__['action']
+args = parser.parse_args(sys.argv[1:]).__dict__
+action = args['action']
+t = args['t']
 
 if action in heirarchy:
-	confirm()
-	cycle(heirarchy.find(action))
+	confirm(t)
+	cycle(heirarchy.index(action))
 
 elif action == 'test':
 	print 'testing...'
-	confirm()
+	confirm(t)
 
 elif action == 'kill':
 	print 'killing...'
@@ -199,5 +263,5 @@ else:
 	exit()
 
 notification(action.title() + " backup is complete.",'dialog-info')
-try: os.remove('/tmp/backup.pid')
+try: os.remove('/tmp/backup_lock.pid')
 except OSError as e: print 'ERROR: Could not remove lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror)
