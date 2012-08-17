@@ -5,8 +5,10 @@ from backuplib import *
 
 hier = ['hourly','daily','weekly','monthly']
 retain = [24,7,4,12]
-WD_dir = '/media/WD/Backups/kevin/'
-root_exclusions = ['/home/kevin/.local/share/Trash/','*/*cache*','*/*wine*','*/*windows/','/dev','/proc','/mnt','/sys','/media','/run','/Windows']
+WD_dir = '/media/Backups/snapshots/'
+root_exclusions = ['/home/kevin/.local/share/Trash/','*/*cache*','*/*wine*','*/*windows/','/dev','/proc','/mnt','/sys','/media','/run','/Windows','/home/kevin/.config/chromium','/home/kevin/.macromedia','*/*Cache*','/home/kevin/.dolphin-emu']
+logf1 = '/home/kevin/.log'
+logf2 = '/home/kevin/.logall'
 
 #==============================================================================================================================================
 
@@ -34,11 +36,13 @@ def execute(cmd):
 	if (returncode == 0): return output
 	else: raise ProcessError(cmd, returncode, output)
 
-def rsync(source,back_dir,log,excludes=[]):
+def rsync(source,back_dir,log,sudo,excludes=[]):
 	for src in source:
-		log.log('Syncing:')
-		log.log(src)
-		params = '/usr/bin/rsync -avx --numeric-ids --relative --delete --delete-excluded'.split(' ')
+		params = []
+		if sudo:
+			params = ['gksudo']
+		log.log('Syncing: ' + src)
+		params += '/usr/bin/rsync -avvx --numeric-ids --relative --delete --delete-excluded'.split()
 		for exclude in excludes: params.append('--exclude='+exclude)
 		params.append(src)
 		params.append(back_dir+'hourly.00/')
@@ -71,7 +75,7 @@ def name_strip(name,direc,log):
 #===============================================================================================================================================#
 #===============================================================================================================================================#
 
-def cycle(hierarchy,loc,retention,source,back_dir,log,to_exclude=[]):
+def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 	log.log('Staring backup...')
 	if loc >= len(hierarchy) or loc < 0:
 		log.log('Error in running parameters.')
@@ -87,10 +91,8 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,to_exclude=[]):
 		last = int(hist[loc].strip())
 	except IOError as e:
 		log.log('ERROR: Could not read history file ({0}).\n\t{1}'.format(e.errno, e.strerror))
-		onexit()
 	except ValueError:
 		log.log('Error reading history file: incorrect input for integer.')
-		onexit()
 
 	else:
 		log.log(str(last) +' ' + hierarchy[loc] + ' backups.')
@@ -118,23 +120,27 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,to_exclude=[]):
 				if note > 1:
 					notification('Copying newest backup directory...','dialog-info')
 
-				log.log('Copying new backup directory...')
-				if os.path.exists(back_dir+'hourly.01'):
+				log.log('Preparing new backup directory...')
+				if os.path.exists(back_dir+'hourly.'+str(retention[loc]).zfill(2)):
+					try: print execute(['/bin/mv', back_dir+'hourly.'+str(retention[loc]-1).zfill(2),back_dir+'hourly.00'])
+					except ProcessError as e:
+						log.log('ERROR: Moving old backup failed: exited with return code {0}.\n{1}'.format(e.returncode,e.output))
+					else: log.log('Backup moved successfully.')
+
+				elif os.path.exists(back_dir+'hourly.01'):
 					log.log('Good to go! Copying now.')
 					try:
 						print execute(['/bin/cp','-val',back_dir+'hourly.01',back_dir+'hourly.00'])
 					except ProcessError as e:
 						log.log('ERROR: Copying backup failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output))
-						onexit()
 
 				else:
-					log.log('Error! Check your backup directories.')
-					onexit()
+					log.log('Creating new backup directory...')
 
 				if note > 1:
 					notification('Executing rsync...','dialog-info')
 
-				rsync(source,back_dir,log,to_exclude)
+				rsync(source,back_dir,log,sudo,to_exclude)
 
 				if os.path.exists(back_dir+'hourly.00'):
 					log.log('rsync executed successfully.')
@@ -195,15 +201,15 @@ def confirm(t,back_dir,log):
 	if not (os.path.exists(back_dir)):
 		log.log('Staring dialog...')
 
-		dialog = gtk.MessageDialog.log(None, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK,\
-			action.title() + ' backup is scheduled to run. Is the backup device mounted at /media/WD?')
+		dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK,\
+			action.title() + ' backup is scheduled to run. Is the backup device mounted at ' + back_dir + '?')
 		dialog.run()
 
 		if not os.path.exists(back_dir):
 			dialog_response = 0
 			log.log('Starting second dialog...')
 			dialog.destroy()
-			dialog = gtk.MessageDialog.log(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please mount the device now.')
+			dialog = gtk.MessageDialog(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please mount the device now.')
 			dialog_response = dialog.run()
 
 			if dialog_response != -5 or not os.path.exists(back_dir):
@@ -218,31 +224,37 @@ def confirm(t,back_dir,log):
 
 #==============================================================================================================================================
 
-log = logger()
+log = logger(logf1, logf2)
 clobber = clobber(['/run/backup.pid','/tmp/backup.pid'],'/var/lock/backup.lock',log)
 
-sys.stdout = logger()
-sys.stderr = logger()
+try: os.remove(logf2)
+except OSError as e: log.log("Couldn't remove last log2 file.\n{0}".format(e.strerror))
+log.log(str(datetime.datetime.now()))
+
+sys.stdout = log
+sys.stderr = log
 
 pynotify.init('Backup')
 parser = argparse.ArgumentParser()
 parser.add_argument('action',action='store')
 parser.add_argument('-t',action='store',type=int,default=120)
 parser.add_argument('-n',action='store',type=int,default=1)
+parser.add_argument('-s',action='store_true',default=False)
 
 args = parser.parse_args(sys.argv[1:]).__dict__
 action = args['action']
 t = args['t']
 note = args['n']
+sup = args['s']
 
 if action in hier:
 	confirm(t,WD_dir,log)
-	cycle(hier,hier.index(action),retain,['/'],WD_dir,log,root_exclusions)
+	cycle(hier,hier.index(action),retain,['/'],WD_dir,log,sup,root_exclusions)
 
 elif action == 'test':
 	log.log('testing...')
-	confirm(t,WD_dir,log)
-	cycle(hier,0,[4,2,2,2],['/home/kevin/test/'],'/media/WD/Backups/test/',log,['*/*wine*','*/*windows*'])
+	confirm(t,WD_dir,log,sup)
+	cycle(hier,0,[4,2,2,2],['/home/kevin/test/'],'/media/Backups/test/',log,sup,['*/*wine*','*/*windows*'])
 
 elif action == 'kill':
 	log.log('killing...')

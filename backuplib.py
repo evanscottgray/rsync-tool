@@ -3,14 +3,16 @@
 import os
 
 class logger(object):
-	def __init__(self):
+	def __init__(self,f1,f2):
+		self.log1 = f1
+		self.log2 = f2
 		return
 	def write(self,data):
-		with open('/home/kevin/.logall','a')as f:
+		with open(self.log2,'a')as f:
 			f.write(data)
 
 	def log(self,data):
-		with open('/home/kevin/.log','a') as f:
+		with open(self.log1,'a') as f:
 			f.write(data)
 			f.write('\n')
 		self.write(data)
@@ -41,6 +43,8 @@ class clobber():
 			self.log.log('Could not create pid files!')
 
 	def exists(self):
+		if self.locked():
+			return False
 		for f in self.files:
 			if os.path.exists(f):
 				with open(f) as p:
