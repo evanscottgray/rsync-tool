@@ -3,13 +3,14 @@ import gtk, pygtk, sys, argparse, time, datetime
 import pynotify, os, signal, shutil, subprocess
 import ConfigParser
 from backuplib import *
+import getpass
 
-hier = ['hourly','daily','weekly','monthly']
-retain = [24,7,4,12]
-WD_dir = '/media/Backups/snapshots/'
-root_exclusions = ['/home/kevin/.local/share/Trash/','*/*cache*','*/*wine*','*/*windows/','/dev','/proc','/mnt','/sys','/media','/run','/Windows','/home/kevin/.config/chromium','/home/kevin/.macromedia','*/*Cache*','/home/kevin/.dolphin-emu']
-logf1 = '/home/kevin/.log'
-logf2 = '/home/kevin/.logall'
+#hier = ['hourly','daily','weekly','monthly']
+#retain = [24,7,4,12]
+#WD_dir = '/media/Backups/snapshots/'
+#root_exclusions = ['/home/kevin/.local/share/Trash/','*/*cache*','*/*wine*','*/*windows/','/dev','/proc','/mnt','/sys','/media','/run','/Windows','/home/kevin/.config/chromium','/home/kevin/.macromedia','*/*Cache*','/home/kevin/.dolphin-emu']
+#logf1 = '/home/kevin/.log'
+#logf2 = '/home/kevin/.logall'
 
 #==============================================================================================================================================
 
@@ -225,6 +226,36 @@ def confirm(t,back_dir,log):
 
 #==============================================================================================================================================
 
+pynotify.init('Backup')
+
+gui = BackupGUI()
+
+parser = argparse.ArgumentParser()
+parser.add_argument('action',action='store')
+
+config = ConfigParser.ConfigParser()
+if config.read(['/etc/backup.conf']) != ['/etc/backup.conf']:
+	if input('Could not read backup configuration file! Would you like to create one (yes/no)?') not in ['yes','Yes','y','Y']:
+		print 'Exiting...'
+		exit()
+	else:
+		gui.config(config)
+		
+
+action = parser.parse_args(sys.argv[1:]).__dict__['action']
+WD_dir = config.get('backup','directory')
+t = int(config.get('backup','time'))
+sup = config.get('backup','super') in ['True','true']
+note = config.get('backup','verbosity')
+logf1 = config.get('backup','shortlog')
+logf2 = config.get('backup','longlog')
+struc = config.items('retain')
+hier = [a[0] for a in struc]
+retain = [int(a[1]) for a in struc]
+root_exclusions = [a[1] for a in config.items('exclusions')]
+print 'Oh happy day!'
+
+
 log = logger(logf1, logf2)
 clobber = clobber(['/run/backup.pid','/tmp/backup.pid'],'/var/lock/backup.lock',log)
 
@@ -235,46 +266,24 @@ log.log(str(datetime.datetime.now()))
 sys.stdout = log
 sys.stderr = log
 
-pynotify.init('Backup')
 
-#parser = argparse.ArgumentParser()
-#parser.add_argument('action',action='store')
-#parser.add_argument('-t',action='store',type=int,default=120)
-#parser.add_argument('-n',action='store',type=int,default=1)
-#parser.add_argument('-s',action='store_true',default=False)
-
-#args = parser.parse_args(sys.argv[1:]).__dict__
-#action = args['action']
-#t = args['t']
-#note = args['n']
-#sup = args['s']
-
-config = ConfigParser.ConfigParser()
-config.read(['/home/kevin/bin/backup.conf'])
-
-WD_dir = config.get('backup','directory')
-#print config.get('backup','exclusions').split('\n')
-t = config.get('backup','time')
-note = config.get('backup','verbosity')
-logf1 = config.get('backup','shortlog')
-logf2 = config.get('backup','longlog')
-struc = config.items('retain')
-hier = [a[0] for a in ret]
-retain = [int(a[1]) for a in ret]
-root_exclusions = [a[1] for a in config.items('exclusions')]
-exit()
-
-if sup:
+if sup and getpass.getuser() != 'root':
+	print 'Super user...'
 	execute(['gksudo',sys.argv[0],sys.argv[1]])
 	exit()
 
+if sup and getpass.getuser() == 'root':
+	print 'Did it!'
+
 if action in hier:
 	confirm(t,WD_dir,log)
+	print 'Quitting for test purposes...'
+	exit()
 	cycle(hier,hier.index(action),retain,['/'],WD_dir,log,root_exclusions)
 
 elif action == 'test':
 	log.log('testing...')
-	confirm(t,WD_dir,log,sup)
+	confirm(t,WD_dir,log)
 	cycle(hier,0,[4,2,2,2],['/home/kevin/test/'],'/media/Backups/test/',log,sup,['*/*wine*','*/*windows*'])
 
 elif action == 'kill':
