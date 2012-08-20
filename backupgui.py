@@ -1,20 +1,29 @@
 import ConfigParser
 import gtk
+import sys
 
 class BackupGUI:
 	
-	def __init__(self):
+	def __init__(self,configfile):
+		self.conf = configfile
 		return
 
 	def callback(self,widget,data):
+#		adbla, adblb, bdir_text, fdir_text, ldir_text, ldi2_text, sudo_button, time_text, verbosity
 		print "Button was pressed: {0}".format(data)
-		print self.bdir_text.get_text()
 		if data == "Okay":
+			self.setting()
 			self.delete_event(widget,'delete_event',data)
+		if data == 'Apply':
+			self.settings()
 		if data[0] == "folder":
 			data[1].set_text(self.fch())
 		elif data[0] == 'file':
 			data[1].set_text(self.fch(False))
+		elif data[0] == 'tog':
+			if data[2].get_active():
+				data[1].set_text(self.fch(False))
+			else: data[1].set_text(self.fch())
 		return
 
 	def delete_event(self,widget,event,data=None):
@@ -35,14 +44,13 @@ class BackupGUI:
 				gtk.STOCK_OPEN, gtk.RESPONSE_OK))
 		choo.set_default_response(gtk.RESPONSE_OK)
 		response = choo.run()
-		toret = -1
+		toret = ''
 		if response == gtk.RESPONSE_OK:
 			toret = choo.get_filename()
 		choo.destroy()
 		return toret
 
-	def addwidget(self,widget,box,spin=True):
-		print 'adding'
+	def addwidget(self,widget,box,spin,window):
 		tbox = gtk.HBox(False, 0)
 		f = gtk.Entry(max=0)
 		tbox.pack_start(f,True,True,0)
@@ -52,33 +60,29 @@ class BackupGUI:
 			tbox.pack_start(b,False,False,0)
 			b.show()
 		else:
+			t = gtk.ToggleButton("File")
 			c = gtk.Button()
 			c.set_image(gtk.image_new_from_icon_name('folder',gtk.ICON_SIZE_BUTTON))
-			c.connect("clicked",self.callback,["file",f])
+			c.connect("clicked",self.callback,["tog",f,t])
+			tbox.pack_start(t,False,False,0)
 			tbox.pack_start(c,False,False,0)
+			t.show()
 			c.show()
 		tbox.show()
 		box.pack_start(tbox, False, False, 0)
-		sz = self.window.get_size()
-		#self.window.set_geometry_hints(self.window,max_height=sz[1])
+		if len(box.get_children()) < 5:
+			window.set_size_request(300,len(box.get_children())*25+32)
+#		else: window.set_size_request(300,157)
 		return
 
-	def remwidget(self,widget,box):
-		print 'removing'
+	def remwidget(self,widget,box,window):
 		chi = box.get_children()
 		if len(chi) > 1:
 			box.remove(chi[len(chi)-1])
-			self.noresize(self.window)
-#			sz = self.window.get_size()
-#			self.window.resize(sz[0],10)
-		return
-
-	def noresize(self,widget,data=None):
-		sz = widget.get_size()
-		print 'done'
-		widget.disconnect(self.toblock)
-		widget.resize(sz[0],10) 
-		self.toblock = self.window.connect("check-resize",self.noresize)
+			sz = self.window.get_size()
+			self.window.resize(sz[0],10)
+			if len(box.get_children()) < 5:
+				window.set_size_request(300,len(box.get_children())*25+32)
 		return
 
 	def showall(self,wids):
@@ -86,16 +90,61 @@ class BackupGUI:
 			w.show()
 		return
 
+	def settings(self):
+		parser = ConfigParser.ConfigParser()
+		parser.read(self.conf)
+		parser.set('backup','backup',self.fdir_text.get_text())
+		parser.set('backup','directory',self.bdir_text.get_text())
+		parser.set('backup','shortlog',self.ldir_text.get_text())
+		parser.set('backup','longlog',self.ldi2_text.get_text())
+		parser.set('backup','super',self.sudo_button.get_active())
+		parser.set('backup','time',self.time_text.get_adjustment().get_value())
+		parser.set('backup','verbosity',self.verbosity.get_adjustment().get_value())
+		parser.remove_section('retain')
+		parser.add_section('retain')
+		for a in self.adbla.get_children():
+			parser.set('retain',a.get_children()[0].get_text(),a.get_children()[1].get_adjustment().get_value())
+		parser.remove_section('exclusions')
+		parser.add_section('exclusions')
+		kids = self.adblb.get_children()
+		for a in range(len(kids)):
+			parser.set('exclusions',str(a),kids[a].get_children()[0].get_text())
+		parser.write(sys.stdout)
+
+	def populate(self):
+		parser = ConfigParser.ConfigParser()
+		parser.read(self.conf)
+		self.fdir_text.set_text(parser.get('backup','backup'))
+		self.bdir_text.set_text(parser.get('backup','directory'))
+		self.ldir_text.set_text(parser.get('backup','shortlog'))
+		self.ldi2_text.set_text(parser.get('backup','longlog'))
+		self.sudo_button.set_active(parser.get('backup','super') in ['True','true'])
+		self.time_text.get_adjustment().set_value(float(parser.get('backup','time')))
+		self.verbosity.get_adjustment().set_value(float(parser.get('backup','verbosity')))
+		rets = parser.items('retain')
+		for i in range(len(rets)-1):
+			self.addwidget(None,self.adbla,True,self.adbla_cont)
+			chil = self.adbla.get_children()
+			for a in range(len(chil)):
+				kids = chil[a].get_children()
+				kids[0].set_text(rets[a][0])
+				kids[1].get_adjustment().set_value(float(rets[a][1]))
+		rets = parser.items('exclusions')
+		for i in range(len(rets)-1):
+			self.addwidget(None,self.adblb,False,self.adblb_cont)
+			chil = self.adblb.get_children()
+			for a in range(len(chil)):
+				kids = chil[a].get_children()
+				kids[0].set_text(rets[a][1])
+		return
+
 	def start(self):
 		self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
 		self.window.set_title('Configuration Editor')
 		self.window.connect("delete_event",self.delete_event)
-		self.toblock = self.window.connect("check-resize",self.noresize)
 		self.window.set_border_width(10)
 
-		table = gtk.Table(4,6,False)
-
-		text_box = gtk.VBox(True,0)
+		text_box = gtk.VBox(False,12)
 		bdir_label = gtk.Label("Destination: ")
 		bdir_label.set_alignment(0,0.5)
 		fdir_label = gtk.Label("Source: ")
@@ -104,10 +153,10 @@ class BackupGUI:
 		ldir_label.set_alignment(0,0.5)
 		ldi2_label = gtk.Label("Extended log: ")
 		ldi2_label.set_alignment(0,0.5)
-		text_box.pack_start(fdir_label, False, True, 0)
-		text_box.pack_start(bdir_label, False, True, 0)
-		text_box.pack_start(ldir_label, False, True, 0)
-		text_box.pack_start(ldi2_label, False, True, 0)
+		text_box.pack_start(fdir_label, False, False, 0)
+		text_box.pack_start(bdir_label, False, False, 0)
+		text_box.pack_start(ldir_label, False, False, 0)
+		text_box.pack_start(ldi2_label, False, False, 0)
 
 		bdir_box = gtk.HBox(False,0)
 		self.bdir_text = gtk.Entry(max=0)
@@ -150,75 +199,91 @@ class BackupGUI:
 		reta_label.set_alignment(0,0.5)
 		reta_box.pack_start(reta_label, False, False, 0)
 
-#		levels = [(gtk.Entry(max=15), gtk.SpinButton(gtk.Adjustment(1,1,99,1)))]
-
+		self.adbla_cont = gtk.ScrolledWindow()
+		self.adbla_cont.set_policy(gtk.POLICY_AUTOMATIC,gtk.POLICY_ALWAYS)
+		self.adbla_cont.set_border_width(10)
+		self.adbla_cont.set_size_request(400,157)
 		self.adbla = gtk.VBox(True,0)
-
-		reta_box.pack_start(self.adbla, False, False, 0)
 		self.adbla.show()
-		self.addwidget(None,self.adbla,True)
+		self.addwidget(None,self.adbla,True,self.adbla_cont)
+		self.adbla_cont.show()
+		self.adbla_cont.add_with_viewport(self.adbla)
+		reta_box.pack_start(self.adbla_cont, False, False, 0)
 
 		reta_add_button = gtk.Button()
 		reta_add_button.set_image(gtk.image_new_from_icon_name('edit-add',gtk.ICON_SIZE_BUTTON))
-		reta_add_button.connect('clicked',self.addwidget,self.adbla,True)
+		reta_add_button.connect('clicked',self.addwidget,self.adbla,True,self.adbla_cont)
 		reta_rem_button = gtk.Button()
 		reta_rem_button.set_image(gtk.image_new_from_icon_name('edit-clear',gtk.ICON_SIZE_BUTTON))
-		reta_rem_button.connect('clicked',self.remwidget,self.adbla)
-
+		reta_rem_button.connect('clicked',self.remwidget,self.adbla,self.adbla_cont)
 		adrem_box = gtk.HBox(False,0)
 		adrem_box.pack_end(reta_add_button, False, False, 0)
 		adrem_box.pack_end(reta_rem_button, False, False, 0)
-
-		reta_add_button.show()
-		reta_rem_button.show()
 		adrem_box.show()
-
 		reta_box.pack_start(adrem_box, False, False, 0)
 
 		excl_box = gtk.VBox(False,0)
 		excl_label = gtk.Label("Exclusions")
 		excl_label.set_alignment(0,0.5)
-		excl_label.show()
 		excl_box.pack_start(excl_label, False, False, 0)
-		self.adblb = gtk.VBox(False,0)
 
-		excl_box.pack_start(self.adblb, False, False, 0)
+		self.adblb_cont = gtk.ScrolledWindow()
+		self.adblb_cont.set_policy(gtk.POLICY_AUTOMATIC,gtk.POLICY_ALWAYS)
+		self.adblb_cont.set_border_width(10)
+		self.adblb_cont.set_size_request(400,157)
+		self.adblb = gtk.VBox()
 		self.adblb.show()
-		self.addwidget(None,self.adblb,False)
+		self.addwidget(None,self.adblb,False,self.adblb_cont)
+		self.adblb_cont.show()
+		self.adblb_cont.add_with_viewport(self.adblb)
+		excl_box.pack_start(self.adblb_cont, True, True, 0)
 
 		excl_add_button = gtk.Button()
 		excl_add_button.set_image(gtk.image_new_from_icon_name('edit-add',gtk.ICON_SIZE_BUTTON))
-		excl_add_button.connect('clicked',self.addwidget,self.adblb,False)
+		excl_add_button.connect('clicked',self.addwidget,self.adblb,False,self.adblb_cont)
 		excl_rem_button = gtk.Button()
 		excl_rem_button.set_image(gtk.image_new_from_icon_name('edit-clear',gtk.ICON_SIZE_BUTTON))
-		excl_rem_button.connect('clicked',self.remwidget,self.adblb)
-
+		excl_rem_button.connect('clicked',self.remwidget,self.adblb,self.adblb_cont)
 		bdrem_box = gtk.HBox(False,0)
 		bdrem_box.pack_end(excl_add_button, False, False, 0)
 		bdrem_box.pack_end(excl_rem_button, False, False, 0)
-
-		excl_add_button.show()
-		excl_rem_button.show()
 		bdrem_box.show()
-
 		excl_box.pack_start(bdrem_box, False, False, 0)
 
+		time_box = gtk.HBox(False,10)
+		time_label = gtk.Label("Backup delay: ")
+		self.time_text = gtk.SpinButton(gtk.Adjustment(0,0,600,30,90))
+		time_box.pack_start(time_label,False, False, 0)
+		time_box.pack_start(self.time_text, False, False, 0)
+
+		self.sudo_button = gtk.CheckButton("Run as super user")
+		time_box.pack_start(self.sudo_button, False, False, 0)
+
+		verb_box = gtk.HBox(False, 8)
+		verb_label = gtk.Label("Notification level: ")
+		self.verbosity = gtk.HScale(gtk.Adjustment(1,0,2,1))
+		self.verbosity.set_digits(0)
+		self.verbosity.set_value_pos(gtk.POS_LEFT)
+		verb_box.pack_start(verb_label, False, False, 0)
+		verb_box.pack_start(self.verbosity, True, True, 0)
+		verb_label.show()
+		self.verbosity.show()
+		verb_box.show()
+
 		comm_box = gtk.HBox(False,0)
-		okay_button = gtk.Button("OK")
+		okay_button = gtk.Button("   OK   ")
 		okay_button.connect("clicked",self.callback,"Okay")
 		canc_button = gtk.Button("Cancel")
 		canc_button.connect("clicked", self.delete_event,'clicked')
 		appl_button = gtk.Button("Apply")
 		appl_button.connect("clicked", self.callback, "Apply")
-		comm_box.pack_start(okay_button, False, False, 0)
-		comm_box.pack_start(canc_button, False, False, 0)
-		comm_box.pack_start(appl_button, False, False, 0)
-
-		self.window.add(table)
+		comm_box.pack_end(appl_button, False, False, 0)
+		comm_box.pack_end(canc_button, False, False, 0)
+		comm_box.pack_end(okay_button, False, False, 0)
 
 		fils_box = gtk.VBox(False,0)
 		fils_box.show()
-		fils_box.pack_start(bdir_box, True, True, 0)
+		fils_box.pack_start(bdir_box, False, False, 0)
 		fils_box.pack_start(fdir_box, False, False, 0)
 		fils_box.pack_start(ldir_box, False, False, 0)
 		fils_box.pack_start(ldi2_box, False, False, 0)
@@ -228,24 +293,28 @@ class BackupGUI:
 		fil2_box.pack_start(text_box, False, False, 0)
 		fil2_box.pack_start(fils_box, True, True, 0)
 
-		#win_box
+		win_box = gtk.VBox(False,0)
+		win_box.pack_start(fil2_box, False, False, 10)
+		win_box.pack_start(time_box, False, False, 10)
+		win_box.pack_start(verb_box, False, False, 10)
+		win_box.pack_start(reta_box, False, False, 0)
+		win_box.pack_start(excl_box, True, True, 0)
+		win_box.pack_start(comm_box, False, False, 0)
+		win_box.show()
 
-		table.attach(fil2_box, 0,1,0,1)
-		table.attach(reta_box, 0,1,1,2)		
-		table.attach(excl_box, 0,1,2,3)	
-		table.attach(comm_box, 0,1,3,4)
+		self.window.add(win_box)
 
-		labels = [ldir_label,ldi2_label,reta_label,bdir_label,fdir_label]
-		buttons = [ldir_button,ldi2_button,bdir_button,fdir_button,okay_button,canc_button,appl_button]
-		boxes = [text_box,bdir_box,fdir_box,ldir_box,ldi2_box,reta_box,excl_box,comm_box]
-		entries = [self.bdir_text,self.fdir_text,self.ldir_text,self.ldi2_text]
+		labels = [ldir_label,ldi2_label,reta_label,bdir_label,fdir_label,reta_label,excl_label,time_label]
+		buttons = [ldir_button,ldi2_button,bdir_button,fdir_button,okay_button,canc_button,appl_button,\
+			reta_add_button,reta_rem_button,excl_add_button,excl_rem_button, self.sudo_button]
+		boxes = [text_box,bdir_box,fdir_box,ldir_box,ldi2_box,reta_box,excl_box,comm_box,time_box]
+		entries = [self.bdir_text,self.fdir_text,self.ldir_text,self.ldi2_text,self.time_text]
 
-		self.showall(labels + buttons + boxes + entries + [table, self.window])
-
-		table.show()
+		self.showall(labels + buttons + boxes + entries)
+		self.populate()
 		self.window.show()
 		gtk.main()
 		return
 
-hello = BackupGUI()
+hello = BackupGUI('/etc/backup.conf')
 print hello.start()
