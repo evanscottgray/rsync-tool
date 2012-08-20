@@ -4,8 +4,10 @@ import sys
 
 class BackupGUI:
 	
-	def __init__(self,configfile):
+	def __init__(self,configfile,clobinst,self.loggerinst):
 		self.conf = configfile
+		self.clobber = clobinst
+		self.log = loggerinst
 		return
 
 	def callback(self,widget,data):
@@ -314,6 +316,48 @@ class BackupGUI:
 		self.populate()
 		self.window.show()
 		gtk.main()
+		return
+
+	def confirm(t,back_dir,self.log):
+		self.log.log('Checking for backup directory.')
+		timetill = str(datetime.timedelta(seconds=t)).zfill(8)
+		if timetill[0] + timetill[1] + timetill[3] == '000':
+			timetill = timetill[4:]
+
+#	if os.path.exists('/tmp/backup.pid'):
+		if self.clobber.exists() or self.clobber.locked():
+			self.log.log('Backup already in progress. Please try again later.')
+			notification('Backup already in progress. Please try again later.','dialog-error')
+			exit()
+
+		notification(action.title() + ' backup is scheduled to run in ' +\
+			 timetill + '. Please ensure that the backup device is connected.','dialog-warning')
+	#	with open('/tmp/backup.pid','w') as f: f.write(str(os.getpid()))
+		self.clobber.make()
+		time.sleep(t)
+		self.log.log('About to check...')
+		if not (os.path.exists(back_dir)):
+			self.log.log('Staring dialog...')
+	
+			dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK,\
+				action.title() + ' backup is scheduled to run. Is the backup device mounted at ' + back_dir + '?')
+			dialog.run()
+	
+			if not os.path.exists(back_dir):
+				dialog_response = 0
+				self.log.log('Starting second dialog...')
+				dialog.destroy()
+				dialog = gtk.MessageDialog(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please mount the device now.')
+				dialog_response = dialog.run()
+	
+				if dialog_response != -5 or not os.path.exists(back_dir):
+					notification(action.title() + ' backup failed: unable to locate backup device. Please try again later.','dialog-error')
+					exit()
+			dialog.destroy()
+		else:
+			notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
+			try: self.clobber.lock()#os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
+			except OSError as e: self.log.log('ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror))
 		return
 
 hello = BackupGUI('/etc/backup.conf')
