@@ -3,6 +3,7 @@ import gtk, pygtk, sys, argparse, time, datetime
 import pynotify, os, signal, shutil, subprocess
 import ConfigParser
 from backuplib import *
+from backupgui import BackupGUI
 import getpass
 
 #hier = ['hourly','daily','weekly','monthly']
@@ -187,8 +188,6 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 
 pynotify.init('Backup')
 
-gui = BackupGUI('/etc/backup.conf',clobber,log)
-
 parser = argparse.ArgumentParser()
 parser.add_argument('action',action='store')
 
@@ -198,9 +197,9 @@ if config.read(['/etc/backup.conf']) != ['/etc/backup.conf']:
 		print 'Exiting...'
 		exit()
 	else:
+		gui = BackupGUI()
 		gui.start()
 		
-
 action = parser.parse_args(sys.argv[1:]).__dict__['action']
 WD_dir = config.get('backup','directory')
 t = int(config.get('backup','time'))
@@ -212,11 +211,10 @@ struc = config.items('retain')
 hier = [a[0] for a in struc]
 retain = [int(a[1]) for a in struc]
 root_exclusions = [a[1] for a in config.items('exclusions')]
-print 'Oh happy day!'
-
 
 log = logger(logf1, logf2)
 clobber = clobber(['/run/backup.pid','/tmp/backup.pid'],'/var/lock/backup.lock',log)
+gui = BackupGUI('/etc/backup.conf',clobber,log)
 
 try: os.remove(logf2)
 except OSError as e: log.log("Couldn't remove last log2 file.\n{0}".format(e.strerror))
@@ -226,13 +224,13 @@ sys.stdout = log
 sys.stderr = log
 
 if action in hier:
-	gui.confirm(t,WD_dir,log)
+	gui.confirm(action,t,WD_dir)
 	print 'Quitting for test purposes...'
 	cycle(hier,hier.index(action),retain,['/'],WD_dir,log,sup,root_exclusions)
 
 elif action == 'test':
 	log.log('testing...')
-	gui.confirm(t,WD_dir,log)
+	gui.confirm(action,t,WD_dir)
 	cycle(hier,0,[4,2,2,2],['/home/kevin/test/'],'/media/Backups/test/',log,sup,['*/*wine*','*/*windows*'])
 
 elif action == 'kill':

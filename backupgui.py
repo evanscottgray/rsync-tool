@@ -1,13 +1,20 @@
 import ConfigParser
 import gtk
 import sys
+import time
+import datetime
+import pynotify
 
 class BackupGUI:
 	
-	def __init__(self,configfile,clobinst,self.loggerinst):
+	def __init__(self,configfile=None,clobinst=None,loggerinst=None):
 		self.conf = configfile
 		self.clobber = clobinst
 		self.log = loggerinst
+		if configfile == None or clobinst == None or loggerinst == None:
+			self.confrm = False
+		else: self.confrm = True
+		pynotify.init('Backup')
 		return
 
 	def callback(self,widget,data):
@@ -318,7 +325,10 @@ class BackupGUI:
 		gtk.main()
 		return
 
-	def confirm(t,back_dir,self.log):
+	def confirm(self,action,t,back_dir):
+		if self.confrm != True:
+			print "ERROR: Not all required arguments for this method have been provided."
+			raise TypeError
 		self.log.log('Checking for backup directory.')
 		timetill = str(datetime.timedelta(seconds=t)).zfill(8)
 		if timetill[0] + timetill[1] + timetill[3] == '000':
@@ -327,10 +337,10 @@ class BackupGUI:
 #	if os.path.exists('/tmp/backup.pid'):
 		if self.clobber.exists() or self.clobber.locked():
 			self.log.log('Backup already in progress. Please try again later.')
-			notification('Backup already in progress. Please try again later.','dialog-error')
+			self.notification('Backup already in progress. Please try again later.','dialog-error')
 			exit()
 
-		notification(action.title() + ' backup is scheduled to run in ' +\
+		self.notification(action.title() + ' backup is scheduled to run in ' +\
 			 timetill + '. Please ensure that the backup device is connected.','dialog-warning')
 	#	with open('/tmp/backup.pid','w') as f: f.write(str(os.getpid()))
 		self.clobber.make()
@@ -351,7 +361,7 @@ class BackupGUI:
 				dialog_response = dialog.run()
 	
 				if dialog_response != -5 or not os.path.exists(back_dir):
-					notification(action.title() + ' backup failed: unable to locate backup device. Please try again later.','dialog-error')
+					self.notification(action.title() + ' backup failed: unable to locate backup device. Please try again later.','dialog-error')
 					exit()
 			dialog.destroy()
 		else:
@@ -360,5 +370,11 @@ class BackupGUI:
 			except OSError as e: self.log.log('ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror))
 		return
 
-hello = BackupGUI('/etc/backup.conf')
-print hello.start()
+	def notification(self,string,icon):
+		n = pynotify.Notification('Backup',string,icon)
+		n.set_urgency(pynotify.URGENCY_CRITICAL)
+		n.show()
+		return
+
+#print hello.start()
+#hello = BackupGUI('/etc/backup.conf')
