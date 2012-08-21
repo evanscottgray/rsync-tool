@@ -1,10 +1,10 @@
 #! /usr/bin/env python
-import gtk, pygtk, sys, argparse, time, datetime
+import sys, argparse, time, datetime
 import pynotify, os, signal, shutil, subprocess
+import getpass, keyring
 import ConfigParser
 from backuplib import *
 from backupgui import BackupGUI
-import getpass
 
 #hier = ['hourly','daily','weekly','monthly']
 #retain = [24,7,4,12]
@@ -25,8 +25,13 @@ def onexit():
 	notification('The backup has encountered a fatal encounter and has been forced to exit. Check the logfile for further details.','dialog-error')
 	exit()
 
-def execute(cmd):
-	process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+def execute(cmd,sudo):
+	print cmd
+	if sudo:
+		password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
+		process = subprocess.Popen(cmd, stdin = password.stdout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	else:
+		process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 	
 	while True:
 		nextline = process.stdout.readline()
@@ -43,14 +48,12 @@ def rsync(source,back_dir,log,su,excludes=[]):
 	for src in source:
 		log.log('Syncing: ' + src)
 		params = []
-		if su:
-			params = ['sudo']
 		params += '/usr/bin/rsync -avvx --numeric-ids --relative --delete --delete-excluded'.split(' ')
 		for exclude in excludes: params.append('--exclude='+exclude)
 		params.append(src)
 		params.append(back_dir+'hourly.00/')
 
-		try: print execute(params)
+		try: print execute(params,su)
 		except ProcessError as e:
 			log.log('ERROR: could not execute {0}: exited with return code {1}.\n\t{2}'.format(e.cmd,e.returncode,e.output))
 	return
@@ -107,19 +110,20 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 			cycle(hierarchy,loc+1,retention,source,back_dir,log,to_exclude)
 		else:
 			names = name_strip(hierarchy[loc],back_dir,log)
+			print names
 			if 00 in names:
 				if note > 1:
 					notification('Cycling backups up...','dialog-info')
 				log.log('Renaming files...')
 				for name in names:
+					print name
 					fro = back_dir+hierarchy[loc]+'.'+str(name).zfill(2)+'/'
 					to = back_dir+hierarchy[loc]+'.'+str(name+1).zfill(2)+'/'
-				moving = ['/bin/mv',fro, to]
-				if sudo: moving = ['sudo','/bin/mv',fro,to]
-				try: print execute(moving)
-				except ProcessError as e:
-					log.log('ERROR: Could not cycle backups. Command {0} failed with code {1}.\n{2}'.format(e.cmd,e.returncode,e.output))
-					onexit()
+					moving = ['/bin/mv',fro, to]
+					try: print execute(moving,sudo)
+					except ProcessError as e:
+						log.log('ERROR: Could not cycle backups. Command {0} failed with code {1}.\n{2}'.format(e.cmd,e.returncode,e.output))
+						onexit()
 
 			if hierarchy[loc] == 'hourly':
 				if note > 1:
@@ -135,10 +139,8 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 				elif os.path.exists(back_dir+'hourly.01'):
 					log.log('Good to go! Copying now.')
 					copying = ['/bin/cp','-val',back_dir+'hourly.01',back_dir+'hourly.00']
-					if sudo:
-						copying = ['sudo','/bin/cp','-val',back_dir+'hourly.01',back_dir+'hourly.00']
 					try:
-						print execute(copying)
+						print execute(copying,sudo)
 					except ProcessError as e:
 						log.log('ERROR: Copying backup failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output))
 

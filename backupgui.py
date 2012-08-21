@@ -1,9 +1,12 @@
 import ConfigParser
 import gtk
+import os
 import sys
 import time
 import datetime
 import pynotify
+import keyring
+import getpass
 
 class BackupGUI:
 	
@@ -118,6 +121,7 @@ class BackupGUI:
 		kids = self.adblb.get_children()
 		for a in range(len(kids)):
 			parser.set('exclusions',str(a),kids[a].get_children()[0].get_text())
+		keyring.set_password('Backup',getpass.getuser(),self.pass_text.get_text())
 		parser.write(sys.stdout)
 
 	def populate(self):
@@ -145,6 +149,7 @@ class BackupGUI:
 			for a in range(len(chil)):
 				kids = chil[a].get_children()
 				kids[0].set_text(rets[a][1])
+		self.pass_text.set_text(keyring.get_password('Backup',getpass.getuser()))
 		return
 
 	def start(self):
@@ -302,9 +307,17 @@ class BackupGUI:
 		fil2_box.pack_start(text_box, False, False, 0)
 		fil2_box.pack_start(fils_box, True, True, 0)
 
+		pass_box = gtk.HBox(False,0)
+		pass_label = gtk.Label("User password for sudo authentication: ")
+		self.pass_text = gtk.Entry(max=0)
+		self.pass_text.set_visibility(False)
+		pass_box.pack_start(pass_label)
+		pass_box.pack_start(self.pass_text)
+
 		win_box = gtk.VBox(False,0)
 		win_box.pack_start(fil2_box, False, False, 10)
 		win_box.pack_start(time_box, False, False, 10)
+		win_box.pack_start(pass_box, False, False, 10)
 		win_box.pack_start(verb_box, False, False, 10)
 		win_box.pack_start(reta_box, False, False, 0)
 		win_box.pack_start(excl_box, True, True, 0)
@@ -313,11 +326,11 @@ class BackupGUI:
 
 		self.window.add(win_box)
 
-		labels = [ldir_label,ldi2_label,reta_label,bdir_label,fdir_label,reta_label,excl_label,time_label]
+		labels = [ldir_label,ldi2_label,reta_label,bdir_label,fdir_label,reta_label,excl_label,time_label,pass_label]
 		buttons = [ldir_button,ldi2_button,bdir_button,fdir_button,okay_button,canc_button,appl_button,\
 			reta_add_button,reta_rem_button,excl_add_button,excl_rem_button, self.sudo_button]
-		boxes = [text_box,bdir_box,fdir_box,ldir_box,ldi2_box,reta_box,excl_box,comm_box,time_box]
-		entries = [self.bdir_text,self.fdir_text,self.ldir_text,self.ldi2_text,self.time_text]
+		boxes = [text_box,bdir_box,fdir_box,ldir_box,ldi2_box,reta_box,excl_box,comm_box,time_box,pass_box]
+		entries = [self.bdir_text,self.fdir_text,self.ldir_text,self.ldi2_text,self.time_text,self.pass_text]
 
 		self.showall(labels + buttons + boxes + entries)
 		self.populate()
@@ -365,7 +378,7 @@ class BackupGUI:
 					exit()
 			dialog.destroy()
 		else:
-			notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
+			self.notification(action.title() + ' backup is now running. Please do not remove backup device.','dialog-warning')
 			try: self.clobber.lock()#os.rename('/tmp/backup.pid','/tmp/backup_lock.pid')
 			except OSError as e: self.log.log('ERROR: could not rename lockfile {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror))
 		return
@@ -376,5 +389,5 @@ class BackupGUI:
 		n.show()
 		return
 
-#print hello.start()
 #hello = BackupGUI('/etc/backup.conf')
+#print hello.start()
