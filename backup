@@ -207,14 +207,14 @@ if config.read(['/etc/backup.conf']) != ['/etc/backup.conf']:
 		
 action = parser.parse_args(sys.argv[1:]).__dict__['action']
 WD_dir = config.get('backup','directory')
-t = int(config.get('backup','time'))
+t = int(float(config.get('backup','time')))
 sup = config.get('backup','super') in ['True','true']
-note = config.get('backup','verbosity')
+note = int(float(config.get('backup','verbosity')))
 logf1 = config.get('backup','shortlog')
 logf2 = config.get('backup','longlog')
 struc = config.items('retain')
 hier = [a[0] for a in struc]
-retain = [int(a[1]) for a in struc]
+retain = [int(float(a[1])) for a in struc]
 root_exclusions = [a[1] for a in config.items('exclusions')]
 
 log = logger(logf1, logf2)
