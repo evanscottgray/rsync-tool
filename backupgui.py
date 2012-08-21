@@ -24,7 +24,7 @@ class BackupGUI:
 #		adbla, adblb, bdir_text, fdir_text, ldir_text, ldi2_text, sudo_button, time_text, verbosity
 		print "Button was pressed: {0}".format(data)
 		if data == "Okay":
-			self.setting()
+			self.settings()
 			self.delete_event(widget,'delete_event',data)
 		if data == 'Apply':
 			self.settings()
@@ -61,6 +61,17 @@ class BackupGUI:
 			toret = choo.get_filename()
 		choo.destroy()
 		return toret
+
+	def check(self,widget,text):
+		print 'checked!'
+		if widget.get_active() == False:
+			print 'Nope'
+			text.set_editable(False)
+			text.show()
+		if widget.get_active() == True:
+			print 'Yup'
+			text.set_editable(True)
+			text.show()
 
 	def addwidget(self,widget,box,spin,window):
 		tbox = gtk.HBox(False, 0)
@@ -122,7 +133,8 @@ class BackupGUI:
 		for a in range(len(kids)):
 			parser.set('exclusions',str(a),kids[a].get_children()[0].get_text())
 		keyring.set_password('Backup',getpass.getuser(),self.pass_text.get_text())
-		parser.write(sys.stdout)
+		with open(self.conf,'w') as f:
+			parser.write(f)
 
 	def populate(self):
 		parser = ConfigParser.ConfigParser()
@@ -264,6 +276,13 @@ class BackupGUI:
 		bdrem_box.show()
 		excl_box.pack_start(bdrem_box, False, False, 0)
 
+		pass_box = gtk.HBox(False,0)
+		pass_label = gtk.Label("User password for sudo authentication: ")
+		self.pass_text = gtk.Entry(max=0)
+		self.pass_text.set_visibility(False)
+		pass_box.pack_start(pass_label)
+		pass_box.pack_start(self.pass_text)
+
 		time_box = gtk.HBox(False,10)
 		time_label = gtk.Label("Backup delay: ")
 		self.time_text = gtk.SpinButton(gtk.Adjustment(0,0,600,30,90))
@@ -271,6 +290,7 @@ class BackupGUI:
 		time_box.pack_start(self.time_text, False, False, 0)
 
 		self.sudo_button = gtk.CheckButton("Run as super user")
+		self.sudo_button.connect('clicked',self.check,self.pass_text)
 		time_box.pack_start(self.sudo_button, False, False, 0)
 
 		verb_box = gtk.HBox(False, 8)
@@ -307,13 +327,6 @@ class BackupGUI:
 		fil2_box.pack_start(text_box, False, False, 0)
 		fil2_box.pack_start(fils_box, True, True, 0)
 
-		pass_box = gtk.HBox(False,0)
-		pass_label = gtk.Label("User password for sudo authentication: ")
-		self.pass_text = gtk.Entry(max=0)
-		self.pass_text.set_visibility(False)
-		pass_box.pack_start(pass_label)
-		pass_box.pack_start(self.pass_text)
-
 		win_box = gtk.VBox(False,0)
 		win_box.pack_start(fil2_box, False, False, 10)
 		win_box.pack_start(time_box, False, False, 10)
@@ -343,9 +356,15 @@ class BackupGUI:
 			print "ERROR: Not all required arguments for this method have been provided."
 			raise TypeError
 		self.log.log('Checking for backup directory.')
-		timetill = str(datetime.timedelta(seconds=t)).zfill(8)
-		if timetill[0] + timetill[1] + timetill[3] == '000':
-			timetill = timetill[4:]
+		tim = str(datetime.timedelta(seconds=t)).zfill(8)
+		if tim == '00:00:00':
+			tim = ''
+		elif tim[0:3] == '00:0':
+			tim = time[4:]
+		elif tim[0] + tim[1] == '00':
+			tim = tim[2:]
+		timetill = ''
+		if tim != '': timetill = ' in ' + tim
 
 #	if os.path.exists('/tmp/backup.pid'):
 		if self.clobber.exists() or self.clobber.locked():
@@ -353,7 +372,7 @@ class BackupGUI:
 			self.notification('Backup already in progress. Please try again later.','dialog-error')
 			exit()
 
-		self.notification(action.title() + ' backup is scheduled to run in ' +\
+		self.notification(action.title() + ' backup is scheduled to run' +\
 			 timetill + '. Please ensure that the backup device is connected.','dialog-warning')
 	#	with open('/tmp/backup.pid','w') as f: f.write(str(os.getpid()))
 		self.clobber.make()

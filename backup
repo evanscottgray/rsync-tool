@@ -27,7 +27,10 @@ def onexit():
 
 def execute(cmd,sudo):
 	print cmd
+	print 'USER?'
+	print getpass.getuser()
 	if sudo:
+		print getpass.getuser()
 		password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
 		process = subprocess.Popen(cmd, stdin = password.stdout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 	else:
@@ -229,6 +232,10 @@ if action in hier:
 	gui.confirm(action,t,WD_dir)
 	print 'Quitting for test purposes...'
 	cycle(hier,hier.index(action),retain,['/'],WD_dir,log,sup,root_exclusions)
+
+elif action == 'edit':
+	gui.start()
+	exit()
 
 elif action == 'test':
 	log.log('testing...')
