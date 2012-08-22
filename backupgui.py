@@ -359,9 +359,9 @@ class BackupGUI:
 		tim = str(datetime.timedelta(seconds=t)).zfill(8)
 		if tim == '00:00:00':
 			tim = ''
-		elif tim[0:3] == '00:0':
-			tim = time[4:]
-		elif tim[0] + tim[1] == '00':
+		elif tim[0:4] == '00:0':
+			tim = tim[4:]
+		elif tim[0:2] == '00':
 			tim = tim[2:]
 		timetill = ''
 		if tim != '': timetill = ' in ' + tim
