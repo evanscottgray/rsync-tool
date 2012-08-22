@@ -1,10 +1,10 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3.2
 import sys, argparse, time, datetime
-import pynotify, os, signal, shutil, subprocess
+import notify2, os, signal, shutil, subprocess
 import getpass, keyring
-import ConfigParser
+import configparser
 from backuplib import *
-from backupgui import BackupGUI
+#from backupgui import BackupGUI
 
 #hier = ['hourly','daily','weekly','monthly']
 #retain = [24,7,4,12]
@@ -16,8 +16,8 @@ from backupgui import BackupGUI
 #==============================================================================================================================================
 
 def notification(string,icon):
-	n = pynotify.Notification("Backup",string,icon)
-	n.set_urgency(pynotify.URGENCY_CRITICAL)
+	n = notify2.Notification("Backup",string,icon)
+	n.set_urgency(notify2.URGENCY_CRITICAL)
 	n.show()
 	return
 
@@ -26,25 +26,25 @@ def onexit():
 	exit()
 
 def execute(cmd,sudo):
-	print cmd
-	print 'USER?'
-	print getpass.getuser()
+	print(cmd)
 	if sudo:
-		print getpass.getuser()
+		print(getpass.getuser())
 		password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
 		process = subprocess.Popen(cmd, stdin = password.stdout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 	else:
 		process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 	
-	while True:
-		nextline = process.stdout.readline()
-		if nextline == '' and process.poll() != None: break
-		sys.stdout.write(nextline)
+#	nextline = str(process.stdout.readline())
+#	while True:
+#		nextline = str(process.stdout.readline())
+#		if nextline == '' and process.poll() != None: break
+#		sys.stdout.write(nextline)
 
 	output = process.communicate()[0]
 	returncode = process.returncode
+	print(output.decode(),end='\n')
 
-	if (returncode == 0): return output
+	if (returncode == 0): return ''
 	else: raise ProcessError(cmd, returncode, output)
 
 def rsync(source,back_dir,log,su,excludes=[]):
@@ -56,7 +56,8 @@ def rsync(source,back_dir,log,su,excludes=[]):
 		params.append(src)
 		params.append(back_dir+'hourly.00/')
 
-		try: print execute(params,su)
+		try:
+			print(execute(params,su))
 		except ProcessError as e:
 			log.log('ERROR: could not execute {0}: exited with return code {1}.\n\t{2}'.format(e.cmd,e.returncode,e.output))
 	return
@@ -113,17 +114,15 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 			cycle(hierarchy,loc+1,retention,source,back_dir,log,to_exclude)
 		else:
 			names = name_strip(hierarchy[loc],back_dir,log)
-			print names
 			if 00 in names:
 				if note > 1:
 					notification('Cycling backups up...','dialog-info')
 				log.log('Renaming files...')
 				for name in names:
-					print name
 					fro = back_dir+hierarchy[loc]+'.'+str(name).zfill(2)+'/'
 					to = back_dir+hierarchy[loc]+'.'+str(name+1).zfill(2)+'/'
 					moving = ['/bin/mv',fro, to]
-					try: print execute(moving,sudo)
+					try: print(execute(moving,sudo))
 					except ProcessError as e:
 						log.log('ERROR: Could not cycle backups. Command {0} failed with code {1}.\n{2}'.format(e.cmd,e.returncode,e.output))
 						onexit()
@@ -134,7 +133,7 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 
 				log.log('Preparing new backup directory...')
 				if os.path.exists(back_dir+'hourly.'+str(retention[loc]).zfill(2)):
-					try: print execute(['/bin/mv', back_dir+'hourly.'+str(retention[loc]-1).zfill(2),back_dir+'hourly.00'])
+					try: print(execute(['/bin/mv', back_dir+'hourly.'+str(retention[loc]-1).zfill(2),back_dir+'hourly.00'],sudo))
 					except ProcessError as e:
 						log.log('ERROR: Moving old backup failed: exited with return code {0}.\n{1}'.format(e.returncode,e.output))
 					else: log.log('Backup moved successfully.')
@@ -143,7 +142,7 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 					log.log('Good to go! Copying now.')
 					copying = ['/bin/cp','-val',back_dir+'hourly.01',back_dir+'hourly.00']
 					try:
-						print execute(copying,sudo)
+						print(execute(copying,sudo))
 					except ProcessError as e:
 						log.log('ERROR: Copying backup failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output))
 
@@ -191,35 +190,34 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 
 #==============================================================================================================================================
 
-pynotify.init('Backup')
+notify2.init('Backup')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('action',action='store')
 
-config = ConfigParser.ConfigParser()
+config = configparser.ConfigParser()
 if config.read(['/etc/backup.conf']) != ['/etc/backup.conf']:
 	if input('Could not read backup configuration file! Would you like to create one (yes/no)?') not in ['yes','Yes','y','Y']:
-		print 'Exiting...'
+		print('Exiting...')
 		exit()
-	else:
-		gui = BackupGUI()
-		gui.start()
+		#gui = BackupGUI()
+		#gui.start()
 		
 action = parser.parse_args(sys.argv[1:]).__dict__['action']
 WD_dir = config.get('backup','directory')
-t = int(config.get('backup','time'))
+t = int(float(config.get('backup','time')))
 sup = config.get('backup','super') in ['True','true']
-note = config.get('backup','verbosity')
+note = int(float(config.get('backup','verbosity')))
 logf1 = config.get('backup','shortlog')
 logf2 = config.get('backup','longlog')
 struc = config.items('retain')
 hier = [a[0] for a in struc]
-retain = [int(a[1]) for a in struc]
+retain = [int(float(a[1])) for a in struc]
 root_exclusions = [a[1] for a in config.items('exclusions')]
 
 log = logger(logf1, logf2)
 clobber = clobber(['/run/backup.pid','/tmp/backup.pid'],'/var/lock/backup.lock',log)
-gui = BackupGUI('/etc/backup.conf',clobber,log)
+#gui = BackupGUI('/etc/backup.conf',clobber,log)
 
 try: os.remove(logf2)
 except OSError as e: log.log("Couldn't remove last log2 file.\n{0}".format(e.strerror))
@@ -229,17 +227,17 @@ sys.stdout = log
 sys.stderr = log
 
 if action in hier:
-	gui.confirm(action,t,WD_dir)
-	print 'Quitting for test purposes...'
+	#gui.confirm(action,t,WD_dir)
+	print('Quitting for test purposes...')
 	cycle(hier,hier.index(action),retain,['/'],WD_dir,log,sup,root_exclusions)
 
 elif action == 'edit':
-	gui.start()
+	#gui.start()
 	exit()
 
 elif action == 'test':
 	log.log('testing...')
-	gui.confirm(action,t,WD_dir)
+	#gui.confirm(action,t,WD_dir)
 	cycle(hier,0,[4,2,2,2],['/home/kevin/test/'],'/media/Backups/test/',log,sup,['*/*wine*','*/*windows*'])
 
 elif action == 'kill':

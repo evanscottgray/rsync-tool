@@ -9,7 +9,12 @@ class logger(object):
 		return
 	def write(self,data):
 		with open(self.log2,'a')as f:
-			f.write(data)
+			if type(data) == type(['a','b']):
+				for line in data:
+					f.write(line.strip())
+					f.write('\n')
+			else:
+				f.write(data)
 
 	def log(self,data):
 		with open(self.log1,'a') as f:
@@ -37,8 +42,9 @@ class clobber():
 			except IOError as e:
 				self.log.log('IOError: could not write lock files. {0}\n{1}'.format(e.errno,e.strerror))
 			else:
+				self.log.log('PID marker file created at ' + f)
 				self.pidfil = f
-				break
+				return
 		if self.pidfil == '':
 			self.log.log('Could not create pid files!')
 
