@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3.2
 import sys, argparse, time, datetime
 import notify2, os, signal, shutil, subprocess
 import getpass, keyring
@@ -34,15 +34,17 @@ def execute(cmd,sudo):
 	else:
 		process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 	
-	while True:
-		nextline = process.stdout.readline()
-		if nextline == '' and process.poll() != None: break
-		sys.stdout.write(nextline)
+#	nextline = str(process.stdout.readline())
+#	while True:
+#		nextline = str(process.stdout.readline())
+#		if nextline == '' and process.poll() != None: break
+#		sys.stdout.write(nextline)
 
 	output = process.communicate()[0]
 	returncode = process.returncode
+	print(output.decode(),end='\n')
 
-	if (returncode == 0): return output
+	if (returncode == 0): return ''
 	else: raise ProcessError(cmd, returncode, output)
 
 def rsync(source,back_dir,log,su,excludes=[]):
@@ -131,7 +133,7 @@ def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
 
 				log.log('Preparing new backup directory...')
 				if os.path.exists(back_dir+'hourly.'+str(retention[loc]).zfill(2)):
-					try: print(execute(['/bin/mv', back_dir+'hourly.'+str(retention[loc]-1).zfill(2),back_dir+'hourly.00']))
+					try: print(execute(['/bin/mv', back_dir+'hourly.'+str(retention[loc]-1).zfill(2),back_dir+'hourly.00'],sudo))
 					except ProcessError as e:
 						log.log('ERROR: Moving old backup failed: exited with return code {0}.\n{1}'.format(e.returncode,e.output))
 					else: log.log('Backup moved successfully.')
