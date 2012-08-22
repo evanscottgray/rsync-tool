@@ -1,5 +1,5 @@
 import ConfigParser
-import gtk
+from gi.repository import Gtk
 import os
 import sys
 import time
@@ -39,25 +39,25 @@ class BackupGUI:
 		return
 
 	def delete_event(self,widget,event,data=None):
-		gtk.main_quit()
+		Gtk.main_quit()
 		return False
 
 	def fch(self,folder=True):
-		choo = gtk.FileChooserDialog("Open..",
+		choo = Gtk.FileChooserDialog("Open..",
 			None,
-			gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER,
-			(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-			gtk.STOCK_OPEN, gtk.RESPONSE_OK))
+			Gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER,
+			(Gtk.STOCK_CANCEL, Gtk.RESPONSE_CANCEL,
+			Gtk.STOCK_OPEN, Gtk.RESPONSE_OK))
 		if not folder:
-			choo = gtk.FileChooserDialog("Open..",
+			choo = Gtk.FileChooserDialog("Open..",
 				None,
-				gtk.FILE_CHOOSER_ACTION_OPEN,
-				(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-				gtk.STOCK_OPEN, gtk.RESPONSE_OK))
-		choo.set_default_response(gtk.RESPONSE_OK)
+				Gtk.FILE_CHOOSER_ACTION_OPEN,
+				(Gtk.STOCK_CANCEL, Gtk.RESPONSE_CANCEL,
+				Gtk.STOCK_OPEN, Gtk.RESPONSE_OK))
+		choo.set_default_response(Gtk.RESPONSE_OK)
 		response = choo.run()
 		toret = ''
-		if response == gtk.RESPONSE_OK:
+		if response == Gtk.RESPONSE_OK:
 			toret = choo.get_filename()
 		choo.destroy()
 		return toret
@@ -74,18 +74,18 @@ class BackupGUI:
 			text.show()
 
 	def addwidget(self,widget,box,spin,window):
-		tbox = gtk.HBox(False, 0)
-		f = gtk.Entry(max=0)
+		tbox = Gtk.HBox(False, 0)
+		f = Gtk.Entry(max=0)
 		tbox.pack_start(f,True,True,0)
 		f.show()
 		if spin:
-			b = gtk.SpinButton(gtk.Adjustment(1,1,99,1))
+			b = Gtk.SpinButton(Gtk.Adjustment(1,1,99,1))
 			tbox.pack_start(b,False,False,0)
 			b.show()
 		else:
-			t = gtk.ToggleButton("File")
-			c = gtk.Button()
-			c.set_image(gtk.image_new_from_icon_name('folder',gtk.ICON_SIZE_BUTTON))
+			t = Gtk.ToggleButton("File")
+			c = Gtk.Button()
+			c.set_image(Gtk.image_new_from_icon_name('folder',Gtk.ICON_SIZE_BUTTON))
 			c.connect("clicked",self.callback,["tog",f,t])
 			tbox.pack_start(t,False,False,0)
 			tbox.pack_start(c,False,False,0)
@@ -165,7 +165,13 @@ class BackupGUI:
 		return
 
 	def start(self):
-		gtk.main()
+		print 'uh oh...'
+		self.glade = Gtk.Builder()
+		self.glade.add_from_file('layout_backup.glade')
+		self.fdir_text = self.glade.get_object('fdir_text')
+		if self.fdir_text:
+			self.fdir_text.set_text("Hello")
+		Gtk.main()
 		return
 
 	def confirm(self,action,t,back_dir):
@@ -198,7 +204,7 @@ class BackupGUI:
 		if not (os.path.exists(back_dir)):
 			self.log.log('Staring dialog...')
 	
-			dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK,\
+			dialog = Gtk.MessageDialog(None, 0, Gtk.MESSAGE_QUESTION, Gtk.BUTTONS_OK,\
 				action.title() + ' backup is scheduled to run. Is the backup device mounted at ' + back_dir + '?')
 			dialog.run()
 	
@@ -206,7 +212,7 @@ class BackupGUI:
 				dialog_response = 0
 				self.log.log('Starting second dialog...')
 				dialog.destroy()
-				dialog = gtk.MessageDialog(None,0,gtk.MESSAGE_INFO,gtk.BUTTONS_OK_CANCEL,'Please mount the device now.')
+				dialog = Gtk.MessageDialog(None,0,Gtk.MESSAGE_INFO,Gtk.BUTTONS_OK_CANCEL,'Please mount the device now.')
 				dialog_response = dialog.run()
 	
 				if dialog_response != -5 or not os.path.exists(back_dir):
@@ -225,5 +231,5 @@ class BackupGUI:
 		n.show()
 		return
 
-#hello = BackupGUI('/etc/backup.conf')
-#print hello.start()
+hello = BackupGUI('/etc/backup.conf')
+print hello.start()
