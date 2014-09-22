@@ -27,12 +27,18 @@ def onexit():
 
 def execute(cmd,sudo):
 	print cmd
-	print 'USER?'
-	print getpass.getuser()
 	if sudo:
 		print getpass.getuser()
-		password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
-		process = subprocess.Popen(cmd, stdin = password.stdout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+		try:
+			password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
+		except:
+			subprocess.call(['gnome-keyring-daemon'])
+			try:
+				password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
+			except: print 'Error trying to unlock keyring.'
+		else:
+			process = subprocess.Popen(cmd, stdin = password.stdout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+			
 	else:
 		process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 	
