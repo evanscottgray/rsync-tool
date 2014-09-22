@@ -16,71 +16,71 @@ from backupgui import BackupGUI
 #==============================================================================================================================================
 
 def notification(string,icon):
-	n = pynotify.Notification("Backup",string,icon)
-	n.set_urgency(pynotify.URGENCY_CRITICAL)
-	n.show()
-	return
+    n = pynotify.Notification("Backup",string,icon)
+    n.set_urgency(pynotify.URGENCY_CRITICAL)
+    n.show()
+    return
 
 def onexit():
-	notification('The backup has encountered a fatal encounter and has been forced to exit. Check the logfile for further details.','dialog-error')
-	exit()
+    notification('The backup has encountered a fatal encounter and has been forced to exit. Check the logfile for further details.','dialog-error')
+    exit()
 
 def execute(cmd,sudo):
-	print cmd
-	if sudo:
-		print getpass.getuser()
-		try:
-			password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
-		except:
-			subprocess.call(['gnome-keyring-daemon'])
-			try:
-				password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
-			except: print 'Error trying to unlock keyring.'
-		else:
-			process = subprocess.Popen(cmd, stdin = password.stdout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-			
-	else:
-		process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-	
-	while True:
-		nextline = process.stdout.readline()
-		if nextline == '' and process.poll() != None: break
-		sys.stdout.write(nextline)
+    print cmd
+    if sudo:
+        print getpass.getuser()
+        try:
+            password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
+        except:
+            subprocess.call(['gnome-keyring-daemon'])
+            try:
+                password= subprocess.Popen(['echo',keyring.get_password('Backup',getpass.getuser())],stdout=subprocess.PIPE)
+            except: print 'Error trying to unlock keyring.'
+        else:
+            process = subprocess.Popen(cmd, stdin = password.stdout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-	output = process.communicate()[0]
-	returncode = process.returncode
+    else:
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-	if (returncode == 0): return output
-	else: raise ProcessError(cmd, returncode, output)
+    while True:
+        nextline = process.stdout.readline()
+        if nextline == '' and process.poll() != None: break
+        sys.stdout.write(nextline)
+
+    output = process.communicate()[0]
+    returncode = process.returncode
+
+    if (returncode == 0): return output
+    else: raise ProcessError(cmd, returncode, output)
 
 def rsync(source,back_dir,log,su,excludes=[]):
-	for src in source:
-		log.log('Syncing: ' + src)
-		params = []
-		params += '/usr/bin/rsync -avvx --numeric-ids --relative --delete --delete-excluded'.split(' ')
-		for exclude in excludes: params.append('--exclude='+exclude)
-		params.append(src)
-		params.append(back_dir+'hourly.00/')
+    for src in source:
+        log.log('Syncing: ' + src)
+        params = []
+        params += '/usr/bin/rsync -avvx --numeric-ids --relative --delete --delete-excluded'.split(' ')
+        for exclude in excludes: params.append('--exclude='+exclude)
+        params.append(src)
+        params.append(back_dir+'hourly.00/')
 
-		try: print execute(params,su)
-		except ProcessError as e:
-			log.log('ERROR: could not execute {0}: exited with return code {1}.\n\t{2}'.format(e.cmd,e.returncode,e.output))
-	return
+        try: print execute(params,su)
+        except ProcessError as e:
+            log.log('ERROR: could not execute {0}: exited with return code {1}.\n\t{2}'.format(e.cmd,e.returncode,e.output))
+    return
 
 def name_strip(name,direc,log):
-	try: files = os.listdir(direc)
-	except OSError as e:
-		log.log('ERROR: Could not list files in {0}. Error number {1}.\n\t{2}'.format(e.filename,e.errno,e.strerror))
-		onexit()
-	else:
-		cyc = []
-		for n in files:
-			if name in n:
-				time = n[len(name)+1:]
-				try: time = int(time)
-				except ValueError: log.log('Could not convert ' + n + ' to integer; skipped.')
-				else: cyc.append(time)
-		return sorted(cyc,reverse=True)
+    try: files = os.listdir(direc)
+    except OSError as e:
+        log.log('ERROR: Could not list files in {0}. Error number {1}.\n\t{2}'.format(e.filename,e.errno,e.strerror))
+        onexit()
+    else:
+        cyc = []
+        for n in files:
+            if name in n:
+                time = n[len(name)+1:]
+                try: time = int(time)
+                except ValueError: log.log('Could not convert ' + n + ' to integer; skipped.')
+                else: cyc.append(time)
+        return sorted(cyc,reverse=True)
 
 #===============================================================================================================================================#
 #===============================================================================================================================================#
@@ -91,109 +91,109 @@ def name_strip(name,direc,log):
 #===============================================================================================================================================#
 
 def cycle(hierarchy,loc,retention,source,back_dir,log,sudo,to_exclude=[]):
-	log.log('Staring backup...')
-	if loc >= len(hierarchy) or loc < 0:
-		log.log('Error in running parameters.')
-		log.log(hierarchy); log.log(loc); log.log(retention)
-		return
+    log.log('Staring backup...')
+    if loc >= len(hierarchy) or loc < 0:
+        log.log('Error in running parameters.')
+        log.log(hierarchy); log.log(loc); log.log(retention)
+        return
 
-	last = 0
-	try:
-		log.log('Reading history file...')
-		f = open(back_dir+'.hist','r+')
-		hist = f.readlines()
-		f.close()
-		last = int(hist[loc].strip())
-	except IOError as e:
-		log.log('ERROR: Could not read history file ({0}).\n\t{1}'.format(e.errno, e.strerror))
-	except ValueError:
-		log.log('Error reading history file: incorrect input for integer.')
+    last = 0
+    try:
+        log.log('Reading history file...')
+        f = open(back_dir+'.hist','r+')
+        hist = f.readlines()
+        f.close()
+        last = int(hist[loc].strip())
+    except IOError as e:
+        log.log('ERROR: Could not read history file ({0}).\n\t{1}'.format(e.errno, e.strerror))
+    except ValueError:
+        log.log('Error reading history file: incorrect input for integer.')
 
-	else:
-		log.log(str(last) +' ' + hierarchy[loc] + ' backups.')
-		if last == retention[loc] and loc < len(hierarchy)-1:
-			log.log('Retention reached; moving one step up the hierarchy.')
-			hist[loc] = '0'
-			with open(back_dir+'.hist','w') as f:
-				for l in hist: f.write(l.strip() + '\n')
-			cycle(hierarchy,loc+1,retention,source,back_dir,log,to_exclude)
-		else:
-			names = name_strip(hierarchy[loc],back_dir,log)
-			print names
-			if 00 in names:
-				if note > 1:
-					notification('Cycling backups up...','dialog-info')
-				log.log('Renaming files...')
-				for name in names:
-					print name
-					fro = back_dir+hierarchy[loc]+'.'+str(name).zfill(2)+'/'
-					to = back_dir+hierarchy[loc]+'.'+str(name+1).zfill(2)+'/'
-					moving = ['/bin/mv',fro, to]
-					try: print execute(moving,sudo)
-					except ProcessError as e:
-						log.log('ERROR: Could not cycle backups. Command {0} failed with code {1}.\n{2}'.format(e.cmd,e.returncode,e.output))
-						onexit()
+    else:
+        log.log(str(last) +' ' + hierarchy[loc] + ' backups.')
+        if last == retention[loc] and loc < len(hierarchy)-1:
+            log.log('Retention reached; moving one step up the hierarchy.')
+            hist[loc] = '0'
+            with open(back_dir+'.hist','w') as f:
+                for l in hist: f.write(l.strip() + '\n')
+            cycle(hierarchy,loc+1,retention,source,back_dir,log,to_exclude)
+        else:
+            names = name_strip(hierarchy[loc],back_dir,log)
+            print names
+            if 00 in names:
+                if note > 1:
+                    notification('Cycling backups up...','dialog-info')
+                log.log('Renaming files...')
+                for name in names:
+                    print name
+                    fro = back_dir+hierarchy[loc]+'.'+str(name).zfill(2)+'/'
+                    to = back_dir+hierarchy[loc]+'.'+str(name+1).zfill(2)+'/'
+                    moving = ['/bin/mv',fro, to]
+                    try: print execute(moving,sudo)
+                    except ProcessError as e:
+                        log.log('ERROR: Could not cycle backups. Command {0} failed with code {1}.\n{2}'.format(e.cmd,e.returncode,e.output))
+                        onexit()
 
-			if hierarchy[loc] == 'hourly':
-				if note > 1:
-					notification('Copying newest backup directory...','dialog-info')
+            if hierarchy[loc] == 'hourly':
+                if note > 1:
+                    notification('Copying newest backup directory...','dialog-info')
 
-				log.log('Preparing new backup directory...')
-				if os.path.exists(back_dir+'hourly.'+str(retention[loc]).zfill(2)):
-					try: print execute(['/bin/mv', back_dir+'hourly.'+str(retention[loc]-1).zfill(2),back_dir+'hourly.00'])
-					except ProcessError as e:
-						log.log('ERROR: Moving old backup failed: exited with return code {0}.\n{1}'.format(e.returncode,e.output))
-					else: log.log('Backup moved successfully.')
+                log.log('Preparing new backup directory...')
+                if os.path.exists(back_dir+'hourly.'+str(retention[loc]).zfill(2)):
+                    try: print execute(['/bin/mv', back_dir+'hourly.'+str(retention[loc]-1).zfill(2),back_dir+'hourly.00'])
+                    except ProcessError as e:
+                        log.log('ERROR: Moving old backup failed: exited with return code {0}.\n{1}'.format(e.returncode,e.output))
+                    else: log.log('Backup moved successfully.')
 
-				elif os.path.exists(back_dir+'hourly.01'):
-					log.log('Good to go! Copying now.')
-					copying = ['/bin/cp','-val',back_dir+'hourly.01',back_dir+'hourly.00']
-					try:
-						print execute(copying,sudo)
-					except ProcessError as e:
-						log.log('ERROR: Copying backup failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output))
+                elif os.path.exists(back_dir+'hourly.01'):
+                    log.log('Good to go! Copying now.')
+                    copying = ['/bin/cp','-val',back_dir+'hourly.01',back_dir+'hourly.00']
+                    try:
+                        print execute(copying,sudo)
+                    except ProcessError as e:
+                        log.log('ERROR: Copying backup failed: exited with return code {0}.\n\t{1}'.format(e.returncode,e.output))
 
-				else:
-					log.log('Creating new backup directory...')
+                else:
+                    log.log('Creating new backup directory...')
 
-				if note > 1:
-					notification('Executing rsync...','dialog-info')
+                if note > 1:
+                    notification('Executing rsync...','dialog-info')
 
-				rsync(source,back_dir,log,sudo,to_exclude)
+                rsync(source,back_dir,log,sudo,to_exclude)
 
-				if os.path.exists(back_dir+'hourly.00'):
-					log.log('rsync executed successfully.')
-				else:
-					log.log('ERROR: rsync was not successful.')
-					try: os.mkdir(back_dir+'hourly.00')
-					except OSError: log.log('ERROR: could not create empty dir; next backup will fail.')
-					notification('rsync failed; please correct any errors manually.','dialog-error')
-			else:
-				if note > 1:
-					notification('Copying latest ' + hierarchy[loc-1] + ' backup...','dialog-info')
-				log.log('Using most recent backup from one step down...')
-				if os.path.exists(back_dir+hierarchy[loc-1]+'.'+str(retention[loc-1]-1).zfill(2)):
-					log.log('Renaming backup...')
-					try: execute(['mv',back_dir+hierarchy[loc-1]+'.'+str(retention[loc-1]-1).zfill(2),back_dir+hierarchy[loc]+'.00'])
-					except ProcessError as e:
-						log.log('ERROR: could not cycle new ' + hierarchy[loc] +\
-						' backup ({0}): {1} failed.\n\t{2}'.format(e.returncode,e.cmd,e.output))
-						notification('Unable to cycle backups; please correct any errors manually.','dialog-error')
+                if os.path.exists(back_dir+'hourly.00'):
+                    log.log('rsync executed successfully.')
+                else:
+                    log.log('ERROR: rsync was not successful.')
+                    try: os.mkdir(back_dir+'hourly.00')
+                    except OSError: log.log('ERROR: could not create empty dir; next backup will fail.')
+                    notification('rsync failed; please correct any errors manually.','dialog-error')
+            else:
+                if note > 1:
+                    notification('Copying latest ' + hierarchy[loc-1] + ' backup...','dialog-info')
+                log.log('Using most recent backup from one step down...')
+                if os.path.exists(back_dir+hierarchy[loc-1]+'.'+str(retention[loc-1]-1).zfill(2)):
+                    log.log('Renaming backup...')
+                    try: execute(['mv',back_dir+hierarchy[loc-1]+'.'+str(retention[loc-1]-1).zfill(2),back_dir+hierarchy[loc]+'.00'])
+                    except ProcessError as e:
+                        log.log('ERROR: could not cycle new ' + hierarchy[loc] +\
+                        ' backup ({0}): {1} failed.\n\t{2}'.format(e.returncode,e.cmd,e.output))
+                        notification('Unable to cycle backups; please correct any errors manually.','dialog-error')
 
-			if os.path.exists(back_dir+hierarchy[loc]+'.'+str(retention[loc]).zfill(2)):
-				if note > 1:
-					notification('Removing old backups...','dialog-info')
-				log.log('Removing old backups...')
-				try: shutil.rmtree(back_dir+hierarchy[loc]+'.'+str(retention[loc]).zfill(2))
-				except OSError as e:
-					log.log('ERROR: Could not remove {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror))
-					notification('Unable to remove old backup; please delete manually.','dialog-error')
+            if os.path.exists(back_dir+hierarchy[loc]+'.'+str(retention[loc]).zfill(2)):
+                if note > 1:
+                    notification('Removing old backups...','dialog-info')
+                log.log('Removing old backups...')
+                try: shutil.rmtree(back_dir+hierarchy[loc]+'.'+str(retention[loc]).zfill(2))
+                except OSError as e:
+                    log.log('ERROR: Could not remove {0} ({1}).\n\t{2}'.format(e.filename,e.errno,e.strerror))
+                    notification('Unable to remove old backup; please delete manually.','dialog-error')
 
-			hist[loc] = str(last+1)
+            hist[loc] = str(last+1)
 
-			with open(back_dir+'.hist','w') as f:
-				for l in hist: f.write(l.strip() + '\n')
-	return
+            with open(back_dir+'.hist','w') as f:
+                for l in hist: f.write(l.strip() + '\n')
+    return
 
 #==============================================================================================================================================
 
@@ -204,13 +204,13 @@ parser.add_argument('action',action='store')
 
 config = ConfigParser.ConfigParser()
 if config.read(['/etc/backup.conf']) != ['/etc/backup.conf']:
-	if input('Could not read backup configuration file! Would you like to create one (yes/no)?') not in ['yes','Yes','y','Y']:
-		print 'Exiting...'
-		exit()
-	else:
-		gui = BackupGUI()
-		gui.start()
-		
+    if input('Could not read backup configuration file! Would you like to create one (yes/no)?') not in ['yes','Yes','y','Y']:
+        print 'Exiting...'
+        exit()
+    else:
+        gui = BackupGUI()
+        gui.start()
+
 action = parser.parse_args(sys.argv[1:]).__dict__['action']
 WD_dir = config.get('backup','directory')
 t = int(float(config.get('backup','time')))
@@ -235,41 +235,41 @@ sys.stdout = log
 sys.stderr = log
 
 if action in hier:
-	gui.confirm(action,t,WD_dir)
-	print 'Quitting for test purposes...'
-	cycle(hier,hier.index(action),retain,['/'],WD_dir,log,sup,root_exclusions)
+    gui.confirm(action,t,WD_dir)
+    print 'Quitting for test purposes...'
+    cycle(hier,hier.index(action),retain,['/'],WD_dir,log,sup,root_exclusions)
 
 elif action == 'edit':
-	gui.start()
-	exit()
+    gui.start()
+    exit()
 
 elif action == 'test':
-	log.log('testing...')
-	gui.confirm(action,t,WD_dir)
-	cycle(hier,0,[4,2,2,2],['/home/kevin/test/'],'/media/Backups/test/',log,sup,['*/*wine*','*/*windows*'])
+    log.log('testing...')
+    gui.confirm(action,t,WD_dir)
+    cycle(hier,0,[4,2,2,2],['/home/kevin/test/'],'/media/Backups/test/',log,sup,['*/*wine*','*/*windows*'])
 
 elif action == 'kill':
-	log.log('killing...')
-#	if os.path.exists('/tmp/backup.pid'):
-	if clobber.exists():
-		try:
-			os.kill(clobber.get(),signal.SIGHUP)
-		except OSError as e: log.log('ERROR: could not kill process.')
-		log.log('success?')
-		notification('The pending backup has been cancelled.','dialog-info')
-		exit()
-	elif clobber.locked():#os.path.exists('/tmp/backup_lock.pid'):
-		notification('Backup is already in progress. Please do not interrupt the process.','dialog-warning')
-		exit()
-	else:
-		notification('No backup in progress. Are you sure one is running?','dialog-question')
-		log.log('Process not found.')
-		exit()
+    log.log('killing...')
+#   if os.path.exists('/tmp/backup.pid'):
+    if clobber.exists():
+        try:
+            os.kill(clobber.get(),signal.SIGHUP)
+        except OSError as e: log.log('ERROR: could not kill process.')
+        log.log('success?')
+        notification('The pending backup has been cancelled.','dialog-info')
+        exit()
+    elif clobber.locked():#os.path.exists('/tmp/backup_lock.pid'):
+        notification('Backup is already in progress. Please do not interrupt the process.','dialog-warning')
+        exit()
+    else:
+        notification('No backup in progress. Are you sure one is running?','dialog-question')
+        log.log('Process not found.')
+        exit()
 
 else:
-	log.log(str(sys.argv))
-	log.log('Invalid option.')
-	exit()
+    log.log(str(sys.argv))
+    log.log('Invalid option.')
+    exit()
 
 notification(action.title() + " backup is complete.",'dialog-info')
 try: clobber.remove()#os.remove('/tmp/backup_lock.pid')
